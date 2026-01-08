@@ -108,15 +108,19 @@ function getCIStatusColor(status: CIStatus): "green" | "red" | "yellow" | "gray"
 
 export function SessionCard({ session }: SessionCardProps) {
   const showPendingTool = session.hasPendingToolUse && session.pendingTool;
+  const dirName = session.cwd.split("/").pop() || session.cwd;
 
   return (
     <HoverCard.Root openDelay={300}>
       <HoverCard.Trigger>
         <Card size="2" className={getCardClass(session)} style={{ cursor: "pointer" }}>
           <Flex direction="column" gap="2">
-            {/* Header: time ago */}
-            <Flex justify="end">
-              <Text size="1" color="gray" weight="medium">
+            {/* Header: directory and time */}
+            <Flex justify="between" align="center">
+              <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
+                {dirName}
+              </Text>
+              <Text size="1" color="gray">
                 {formatTimeAgo(session.lastActivityAt)}
               </Text>
             </Flex>
@@ -142,24 +146,31 @@ export function SessionCard({ session }: SessionCardProps) {
               </Text>
             )}
 
-            {/* Footer: PR info or message count */}
-            <Flex align="center" gap="2">
-              {session.pr ? (
-                <Link
-                  href={session.pr.url}
-                  target="_blank"
-                  size="1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Badge color={getCIStatusColor(session.pr.ciStatus)} variant="soft" size="1">
-                    {getCIStatusIcon(session.pr.ciStatus)} #{session.pr.number}
-                  </Badge>
-                </Link>
-              ) : (
-                <Text size="1" color="gray">
-                  {session.messageCount} msgs
-                </Text>
-              )}
+            {/* Footer: branch/PR info and message count */}
+            <Flex align="center" justify="between" gap="2">
+              <Flex align="center" gap="2">
+                {session.pr ? (
+                  <Link
+                    href={session.pr.url}
+                    target="_blank"
+                    size="1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Badge color={getCIStatusColor(session.pr.ciStatus)} variant="soft" size="1">
+                      {getCIStatusIcon(session.pr.ciStatus)} #{session.pr.number}
+                    </Badge>
+                  </Link>
+                ) : session.gitBranch ? (
+                  <Code size="1" variant="soft" color="gray">
+                    {session.gitBranch.length > 20
+                      ? session.gitBranch.slice(0, 17) + "..."
+                      : session.gitBranch}
+                  </Code>
+                ) : null}
+              </Flex>
+              <Text size="1" color="gray">
+                {session.messageCount} msgs
+              </Text>
             </Flex>
           </Flex>
         </Card>
