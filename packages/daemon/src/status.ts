@@ -118,12 +118,19 @@ export function deriveStatus(
       }
     );
 
-    console.log(`[Status] Assistant entry: hasPendingToolUse=${hasPendingToolUse}, stopReason=${stopReason}, hasTurnEndMarker=${hasTurnEndMarker}`);
+    // Timeout fallback: if no turn-end marker and message is old enough,
+    // assume turn ended (for sessions without hooks on older CC versions)
+    const timeSinceLastMessage = now - lastActivityTime;
+    const STALE_ASSISTANT_TIMEOUT_MS = 60 * 1000; // 60 seconds
+    const isStaleWithoutToolUse = !hasPendingToolUse && timeSinceLastMessage > STALE_ASSISTANT_TIMEOUT_MS;
+
+    console.log(`[Status] Assistant entry: hasPendingToolUse=${hasPendingToolUse}, stopReason=${stopReason}, hasTurnEndMarker=${hasTurnEndMarker}, timeSince=${Math.round(timeSinceLastMessage/1000)}s`);
 
     // "waiting" if:
     // - Claude explicitly finished with end_turn, OR
-    // - There's a turn-end system message (turn completed even if stop_reason is null)
-    if ((stopReason === "end_turn" || hasTurnEndMarker) && !hasPendingToolUse) {
+    // - There's a turn-end system message (turn completed even if stop_reason is null), OR
+    // - Message is stale and has no pending tool use (fallback for sessions without hooks)
+    if ((stopReason === "end_turn" || hasTurnEndMarker || isStaleWithoutToolUse) && !hasPendingToolUse) {
       status = "waiting";
     } else {
       // Still streaming, or tool executing
