@@ -187,12 +187,10 @@ export function logEntryToEvent(entry: LogEntry): StatusEvent | null {
       "Read",           // File reading
       "Glob",           // File pattern matching
       "Grep",           // Content search
-      "WebSearch",      // Web search
-      "WebFetch",       // URL fetching
       "TodoWrite",      // Todo list management
-      "AskUserQuestion", // Asking user questions (auto-approved, just waits for response)
-      "NotebookEdit",   // Notebook editing (often auto-approved)
       "TaskOutput",     // Getting task output
+      // Note: WebFetch, WebSearch, NotebookEdit, AskUserQuestion can require approval
+      // depending on user configuration, so they're not auto-approved
     ]);
     const toolUseBlocks = assistantEntry.message.content.filter(
       (b) => b.type === "tool_use" && !autoApprovedTools.has(b.name)
