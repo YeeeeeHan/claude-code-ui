@@ -180,7 +180,7 @@ export function SessionCard({ session, disableHover }: SessionCardProps) {
           {/* Recent output */}
           <Flex
             direction="column"
-            gap="3"
+            gap="1"
             p="3"
             flexGrow="1"
             style={{
@@ -198,41 +198,27 @@ export function SessionCard({ session, disableHover }: SessionCardProps) {
                   className="markdown-content"
                 >
                   {output.role === "user" && (
-                    <Text size="1" weight="medium" mb="1" style={{ display: "block" }}>You:</Text>
+                    <Text size="1" weight="medium" mb="1">You:</Text>
                   )}
                   <Markdown
                     components={{
-                      // Override default elements to use Radix styling
-                      // Use spans for paragraphs to avoid extra margins
-                      p: ({ children }) => <Text as="p" size="1" style={{ marginBottom: "0.5em" }}>{children}</Text>,
+                      p: ({ children }) => <Text as="p" size="1" mb="2">{children}</Text>,
                       code: ({ children, className }) => {
                         const isBlock = className?.includes("language-");
                         return isBlock ? (
-                          <Box
-                            as="pre"
-                            p="2"
-                            my="2"
-                            style={{
-                              backgroundColor: "var(--gray-3)",
-                              borderRadius: "var(--radius-2)",
-                              overflow: "auto",
-                              fontSize: "var(--font-size-1)",
-                            }}
-                          >
-                            <code>{children}</code>
-                          </Box>
+                          <Code as="pre" size="1" my="2" p="2">{children}</Code>
                         ) : (
                           <Code size="1">{children}</Code>
                         );
                       },
-                      ul: ({ children }) => <Box as="ul" pl="4" style={{ marginBottom: "0.5em" }}>{children}</Box>,
-                      ol: ({ children }) => <Box as="ol" pl="4" style={{ marginBottom: "0.5em" }}>{children}</Box>,
+                      ul: ({ children }) => <Box as="ul" pl="4" mb="2">{children}</Box>,
+                      ol: ({ children }) => <Box as="ol" pl="4" mb="2">{children}</Box>,
                       li: ({ children }) => <Text as="li" size="1">{children}</Text>,
-                      h1: ({ children }) => <Heading size="3" style={{ marginBottom: "0.5em" }}>{children}</Heading>,
-                      h2: ({ children }) => <Heading size="2" style={{ marginBottom: "0.5em" }}>{children}</Heading>,
-                      h3: ({ children }) => <Heading size="1" style={{ marginBottom: "0.25em" }}>{children}</Heading>,
+                      h1: ({ children }) => <Heading size="3" mb="2">{children}</Heading>,
+                      h2: ({ children }) => <Heading size="2" mb="2">{children}</Heading>,
+                      h3: ({ children }) => <Heading size="1" mb="1">{children}</Heading>,
                       a: ({ href, children }) => (
-                        <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-11)" }}>
+                        <a href={href} target="_blank" rel="noopener noreferrer">
                           {children}
                         </a>
                       ),
