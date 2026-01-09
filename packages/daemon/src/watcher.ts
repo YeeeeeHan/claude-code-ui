@@ -42,6 +42,7 @@ export class SessionWatcher extends EventEmitter {
   private sessions = new Map<string, SessionState>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private debounceMs: number;
+  private staleCheckInterval: NodeJS.Timeout | null = null;
 
   constructor(options: { debounceMs?: number } = {}) {
     super();
@@ -75,12 +76,24 @@ export class SessionWatcher extends EventEmitter {
     await new Promise<void>((resolve) => {
       this.watcher!.on("ready", resolve);
     });
+
+    // Start periodic stale check to detect sessions that have gone idle
+    // This catches cases where the turn ends but no turn_duration event is written
+    this.staleCheckInterval = setInterval(() => {
+      this.checkStaleSessions();
+    }, 10_000); // Check every 10 seconds
   }
 
   stop(): void {
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
+    }
+
+    // Clear stale check interval
+    if (this.staleCheckInterval) {
+      clearInterval(this.staleCheckInterval);
+      this.staleCheckInterval = null;
     }
 
     // Clear all debounce timers
@@ -92,6 +105,35 @@ export class SessionWatcher extends EventEmitter {
 
   getSessions(): Map<string, SessionState> {
     return this.sessions;
+  }
+
+  /**
+   * Periodically check for sessions that have gone stale.
+   * This catches cases where Claude finishes responding but no turn_duration
+   * event is written to the log file.
+   */
+  private checkStaleSessions(): void {
+    for (const session of this.sessions.values()) {
+      // Only check sessions that are currently "working"
+      if (session.status.status !== "working") {
+        continue;
+      }
+
+      // Re-derive status which will apply STALE_TIMEOUT
+      const newStatus = deriveStatus(session.entries);
+
+      // If status changed, emit update
+      if (statusChanged(session.status, newStatus)) {
+        const previousStatus = session.status;
+        session.status = newStatus;
+
+        this.emit("session", {
+          type: "updated",
+          session,
+          previousStatus,
+        } satisfies SessionEvent);
+      }
+    }
   }
 
   private debouncedHandleFile(filepath: string): void {

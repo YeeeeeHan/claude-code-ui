@@ -246,7 +246,7 @@ export function deriveStatusFromMachine(entries: LogEntry[]): {
   const lastActivityTime = context.lastActivityAt ? new Date(context.lastActivityAt).getTime() : 0;
   const timeSinceActivity = now - lastActivityTime;
 
-  const STALE_TIMEOUT_MS = 60 * 1000; // 60 seconds
+  const STALE_TIMEOUT_MS = 15 * 1000; // 15 seconds - detect stale sessions quickly
 
   // Apply stale timeout if working with no pending tool use for too long
   // (idle status is handled by the UI based on elapsed time)
