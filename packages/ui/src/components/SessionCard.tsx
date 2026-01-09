@@ -67,16 +67,6 @@ function getRoleColor(role: "user" | "assistant" | "tool"): string {
   }
 }
 
-function getRolePrefix(role: "user" | "assistant" | "tool"): string {
-  switch (role) {
-    case "user":
-      return "You: ";
-    case "assistant":
-      return "";
-    case "tool":
-      return "";
-  }
-}
 
 function getCIStatusIcon(status: CIStatus): string {
   switch (status) {
@@ -203,17 +193,18 @@ export function SessionCard({ session, disableHover }: SessionCardProps) {
               session.recentOutput.map((output, i) => (
                 <Box
                   key={i}
-                  mb={i < session.recentOutput.length - 1 ? "2" : "0"}
+                  mb={i < session.recentOutput.length - 1 ? "3" : "0"}
                   style={{ color: getRoleColor(output.role) }}
                   className="markdown-content"
                 >
-                  {getRolePrefix(output.role) && (
-                    <Text size="1" weight="medium">{getRolePrefix(output.role)}</Text>
+                  {output.role === "user" && (
+                    <Text size="1" weight="medium" mb="1" style={{ display: "block" }}>You:</Text>
                   )}
                   <Markdown
                     components={{
                       // Override default elements to use Radix styling
-                      p: ({ children }) => <Text as="p" size="1" mb="2">{children}</Text>,
+                      // Use spans for paragraphs to avoid extra margins
+                      p: ({ children }) => <Text as="p" size="1" style={{ marginBottom: "0.5em" }}>{children}</Text>,
                       code: ({ children, className }) => {
                         const isBlock = className?.includes("language-");
                         return isBlock ? (
@@ -234,12 +225,12 @@ export function SessionCard({ session, disableHover }: SessionCardProps) {
                           <Code size="1">{children}</Code>
                         );
                       },
-                      ul: ({ children }) => <Box as="ul" pl="4" mb="2">{children}</Box>,
-                      ol: ({ children }) => <Box as="ol" pl="4" mb="2">{children}</Box>,
+                      ul: ({ children }) => <Box as="ul" pl="4" style={{ marginBottom: "0.5em" }}>{children}</Box>,
+                      ol: ({ children }) => <Box as="ol" pl="4" style={{ marginBottom: "0.5em" }}>{children}</Box>,
                       li: ({ children }) => <Text as="li" size="1">{children}</Text>,
-                      h1: ({ children }) => <Heading size="3" mb="2">{children}</Heading>,
-                      h2: ({ children }) => <Heading size="2" mb="2">{children}</Heading>,
-                      h3: ({ children }) => <Heading size="1" mb="1">{children}</Heading>,
+                      h1: ({ children }) => <Heading size="3" style={{ marginBottom: "0.5em" }}>{children}</Heading>,
+                      h2: ({ children }) => <Heading size="2" style={{ marginBottom: "0.5em" }}>{children}</Heading>,
+                      h3: ({ children }) => <Heading size="1" style={{ marginBottom: "0.25em" }}>{children}</Heading>,
                       a: ({ href, children }) => (
                         <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-11)" }}>
                           {children}
