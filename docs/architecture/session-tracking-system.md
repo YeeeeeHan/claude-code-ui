@@ -543,11 +543,13 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 
 **Problem:** Cannot distinguish which Claude process owns which session when multiple sessions run in the same directory.
 
-**Impact:** All sessions in a directory are marked LIVE if any Claude process is running in that directory.
+**Impact:** ~~All sessions in a directory are marked LIVE if any Claude process is running in that directory.~~ **Fixed:** Now only the most recent session per directory is marked LIVE.
 
-**Workaround:** Run sessions from different directories.
+**Mitigation:** The `detectLiveSessions()` function now tracks the most recent session per `cwd` by `lastActivityAt` timestamp, ensuring only one LIVE badge per directory.
 
 **Technical Reason:** Session files don't contain unique identifiers that are exposed via process inspection tools (lsof, ps).
+
+**Related:** See `docs/solutions/ui-bugs/multiple-sessions-showing-live-20260122.md` for the fix details.
 
 ### 2. Daemon File Locking
 

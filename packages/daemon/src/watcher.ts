@@ -498,10 +498,25 @@ export class SessionWatcher extends EventEmitter {
       }
 
       // Step 3: Match sessions to live cwds
+      // Only mark the MOST RECENT session per cwd as LIVE to reduce noise
+      // (older sessions in the same directory are not the active one)
+      const mostRecentByCwd = new Map<string, { sessionId: string; lastActivityAt: string }>();
+
       for (const session of this.sessions.values()) {
         if (liveCwds.has(session.cwd)) {
-          liveSessionIds.add(session.sessionId);
+          const existing = mostRecentByCwd.get(session.cwd);
+          const sessionActivity = session.status.lastActivityAt;
+          if (!existing || new Date(sessionActivity) > new Date(existing.lastActivityAt)) {
+            mostRecentByCwd.set(session.cwd, {
+              sessionId: session.sessionId,
+              lastActivityAt: sessionActivity,
+            });
+          }
         }
+      }
+
+      for (const { sessionId } of mostRecentByCwd.values()) {
+        liveSessionIds.add(sessionId);
       }
     } catch {
       // ps or lsof failed - return empty set
