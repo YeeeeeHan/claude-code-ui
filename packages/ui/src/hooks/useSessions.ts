@@ -68,12 +68,17 @@ export interface RepoGroup {
 }
 
 /**
- * Group sessions by repo, sorted by activity score
+ * Group sessions by repo, sorted by activity score.
+ * Only includes sessions with a running Claude process (hasProcess: true).
+ * Excludes repo groups that have no active sessions.
  */
 export function groupSessionsByRepo(sessions: Session[]): RepoGroup[] {
+  // Filter to only sessions with a running Claude process
+  const activeSessions = sessions.filter((s) => s.hasProcess);
+
   const groups = new Map<string, Session[]>();
 
-  for (const session of sessions) {
+  for (const session of activeSessions) {
     const key = session.gitRepoId ?? "Other";
     const existing = groups.get(key) ?? [];
     existing.push(session);

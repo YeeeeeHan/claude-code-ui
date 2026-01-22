@@ -18,11 +18,13 @@ function IndexPage() {
     return () => clearInterval(interval);
   }, []);
 
-  if (sessions.length === 0) {
+  const repoGroups = groupSessionsByRepo(sessions);
+
+  if (repoGroups.length === 0) {
     return (
       <Flex direction="column" align="center" gap="3" py="9">
         <Text color="gray" size="3">
-          No sessions found
+          No active sessions
         </Text>
         <Text color="gray" size="2">
           Start a Claude Code session to see it here
@@ -30,8 +32,6 @@ function IndexPage() {
       </Flex>
     );
   }
-
-  const repoGroups = groupSessionsByRepo(sessions);
 
   return (
     <Flex direction="column">

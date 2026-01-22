@@ -291,7 +291,7 @@ function SessionRow({ session }: { session: Session }) {
 }
 
 export function SessionTable({ sessions }: SessionTableProps) {
-  // Sort by status priority and lastActivityAt
+  // Sessions are already filtered by hasProcess in groupSessionsByRepo
   const sortedSessions = [...sessions].sort((a, b) => {
     const statusPriority: Record<EffectiveStatus, number> = {
       working: 0,

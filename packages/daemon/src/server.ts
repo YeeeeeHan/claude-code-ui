@@ -136,6 +136,7 @@ export class StreamServer {
       summary,
       recentOutput: extractRecentOutput(sessionState.entries),
       pr,
+      hasProcess: sessionState.hasProcess ?? false,
     };
 
     // Create the event using the schema helpers
@@ -184,6 +185,7 @@ export class StreamServer {
       summary,
       recentOutput: extractRecentOutput(sessionState.entries),
       pr,
+      hasProcess: sessionState.hasProcess ?? false,
     };
 
     const event = sessionsStateSchema.sessions.update({ value: session });

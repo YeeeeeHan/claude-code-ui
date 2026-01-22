@@ -2,6 +2,11 @@ import { watch, type FSWatcher } from "chokidar";
 import { EventEmitter } from "node:events";
 import { readFile, unlink, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
+
 import {
   tailJSONL,
   extractMetadata,
@@ -62,6 +67,8 @@ export interface SessionState {
   hasStopSignal?: boolean;
   // True when SessionEnd hook has fired (session closed)
   hasEndedSignal?: boolean;
+  // True when a Claude process is running in this session's cwd
+  hasProcess?: boolean;
 }
 
 export interface SessionEvent {
@@ -81,6 +88,7 @@ export class SessionWatcher extends EventEmitter {
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private debounceMs: number;
   private staleCheckInterval: NodeJS.Timeout | null = null;
+  private activeCwds = new Set<string>(); // Directories with running Claude processes
 
   constructor(options: { debounceMs?: number } = {}) {
     super();
@@ -179,9 +187,14 @@ export class SessionWatcher extends EventEmitter {
 
     // Start periodic stale check to detect sessions that have gone idle
     // This catches cases where the turn ends but no turn_duration event is written
+    // Also update process detection to track which sessions have running Claude processes
     this.staleCheckInterval = setInterval(() => {
       this.checkStaleSessions();
+      this.updateProcessStatus();
     }, 10_000); // Check every 10 seconds
+
+    // Do initial process detection
+    await this.updateProcessStatus();
   }
 
   /**
@@ -441,6 +454,70 @@ export class SessionWatcher extends EventEmitter {
     }
   }
 
+  /**
+   * Detect which directories have running Claude processes.
+   * Includes both foreground (with TTY) and background (TTY=??) processes.
+   */
+  private async detectActiveCwds(): Promise<Set<string>> {
+    const cwds = new Set<string>();
+
+    try {
+      // Get all Claude process PIDs (both foreground and background)
+      const { stdout: pgrepOut } = await execAsync("pgrep -x claude 2>/dev/null || true");
+      const pids = pgrepOut.trim().split("\n").filter(Boolean);
+
+      if (pids.length === 0) {
+        return cwds;
+      }
+
+      // Get working directory for each Claude process
+      for (const pid of pids) {
+        try {
+          const { stdout: lsofOut } = await execAsync(`lsof -p ${pid} 2>/dev/null | grep cwd || true`);
+          // lsof cwd line format: COMMAND PID USER FD TYPE ... NAME
+          const parts = lsofOut.trim().split(/\s+/);
+          if (parts.length > 0) {
+            const cwd = parts[parts.length - 1];
+            if (cwd && cwd.startsWith("/")) {
+              cwds.add(cwd);
+            }
+          }
+        } catch {
+          // Skip this PID if lsof fails
+        }
+      }
+    } catch {
+      // pgrep or lsof failed - return empty set
+    }
+
+    return cwds;
+  }
+
+  /**
+   * Update hasProcess status for all sessions and emit updates for changes.
+   */
+  private async updateProcessStatus(): Promise<void> {
+    const newActiveCwds = await this.detectActiveCwds();
+
+    for (const session of this.sessions.values()) {
+      const hadProcess = this.activeCwds.has(session.cwd);
+      const hasProcess = newActiveCwds.has(session.cwd);
+
+      if (hadProcess !== hasProcess) {
+        session.hasProcess = hasProcess;
+        log("Watcher", `Session ${session.sessionId.slice(0, 8)} hasProcess: ${hadProcess} → ${hasProcess}`);
+
+        this.emit("session", {
+          type: "updated",
+          session,
+          previousStatus: session.status,
+        } satisfies SessionEvent);
+      }
+    }
+
+    this.activeCwds = newActiveCwds;
+  }
+
   private debouncedHandleFile(filepath: string): void {
     // Clear existing timer for this file
     const existing = this.debounceTimers.get(filepath);
@@ -602,6 +679,7 @@ export class SessionWatcher extends EventEmitter {
         hasWorkingSignal: hasWorkingSig,
         hasStopSignal: hasStopSig,
         hasEndedSignal: hasEndedSig,
+        hasProcess: this.activeCwds.has(metadata.cwd),
       };
 
       // Store session
