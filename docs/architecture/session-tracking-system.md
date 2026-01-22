@@ -6,11 +6,10 @@ This document provides a comprehensive technical reference for the Claude Code U
 
 1. [Architecture Overview](#architecture-overview)
 2. [Session Status State Machine](#session-status-state-machine)
-3. [Live Session Detection](#live-session-detection)
-4. [Git Repository Grouping](#git-repository-grouping)
-5. [Data Flow](#data-flow)
-6. [Known Limitations](#known-limitations)
-7. [Code References](#code-references)
+3. [Git Repository Grouping](#git-repository-grouping)
+4. [Data Flow](#data-flow)
+5. [Known Limitations](#known-limitations)
+6. [Code References](#code-references)
 
 ---
 
@@ -22,7 +21,6 @@ The session tracking system monitors active Claude Code sessions and provides re
 - Watches JSONL session files in `~/.claude/projects/`
 - Watches signal files in `~/.claude/session-signals/`
 - Derives session status using XState state machine
-- Detects live sessions via process inspection
 - Publishes session state to Durable Streams server
 
 ### 2. Server Layer (`packages/daemon/src/server.ts`)
@@ -48,11 +46,6 @@ The session tracking system monitors active Claude Code sessions and provides re
 - Hooks are authoritative - they represent user actions in real-time
 - JSONL files may have delays or missing events (especially `turn_duration`)
 - Provides immediate feedback for user prompts and tool approvals
-
-**Why separate live detection from status detection?**
-- Status is about conversation state (working/waiting)
-- Live detection is about process existence (is Claude running?)
-- A session can be "waiting" but not "live" (user closed Claude)
 
 ---
 
@@ -194,138 +187,6 @@ function getEffectiveStatus(session: Session): EffectiveStatus {
   return "waiting";
 }
 ```
-
----
-
-## Live Session Detection
-
-Live detection determines which sessions have an active Claude CLI process. This is independent of status (working/waiting/idle).
-
-### Initial Failed Approach: lsof on Session Files
-
-**What we tried:**
-```bash
-lsof ~/.claude/projects/*/main.jsonl
-```
-
-**Why it failed:**
-The daemon process opens all session files for watching via `chokidar`, so `lsof` always reports the daemon PID rather than the Claude CLI PID.
-
-**Location of failed experiment:** Conversation debugging (not in code)
-
-### Working Approach: Match Process CWD to Session CWD (with TTY filter)
-
-**Algorithm:**
-1. Find all Claude processes with TTY info: `ps aux | grep -E 'claude$'`
-2. Filter out background processes (TTY = `??`)
-3. For each process with an active terminal, get its working directory: `lsof -p <pid> | grep cwd`
-4. Extract the cwd path from lsof output
-5. Match sessions to live cwds by comparing `session.cwd` to live process cwds
-
-**Implementation Location:** `/packages/daemon/src/watcher.ts:459-501`
-
-```typescript
-private async detectLiveSessions(): Promise<Set<string>> {
-  const liveSessionIds = new Set<string>();
-
-  try {
-    // Step 1: Get all Claude processes with TTY info
-    const { stdout: psOut } = await execAsync("ps aux | grep -E 'claude$' | grep -v grep || true");
-    const lines = psOut.trim().split("\n").filter(Boolean);
-
-    if (lines.length === 0) {
-      return liveSessionIds;
-    }
-
-    // Step 2: Get working directory for each Claude process with active terminal
-    const liveCwds = new Set<string>();
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 11) continue;
-
-      const pid = parts[1];
-      const tty = parts[6];
-
-      // Skip background sessions (TTY = ??)
-      if (tty === "??") continue;
-
-      try {
-        const { stdout: lsofOut } = await execAsync(`lsof -p ${pid} 2>/dev/null | grep cwd || true`);
-        const lsofParts = lsofOut.trim().split(/\s+/);
-        if (lsofParts.length > 0) {
-          const cwd = lsofParts[lsofParts.length - 1];
-          if (cwd && cwd.startsWith("/")) {
-            liveCwds.add(cwd);
-          }
-        }
-      } catch {
-        // Skip this PID if lsof fails
-      }
-    }
-
-    // Step 3: Match sessions to live cwds
-    for (const session of this.sessions.values()) {
-      if (liveCwds.has(session.cwd)) {
-        liveSessionIds.add(session.sessionId);
-      }
-    }
-  } catch {
-    // ps or lsof failed - return empty set
-  }
-
-  return liveSessionIds;
-}
-```
-
-### Update Frequency
-
-Live status is updated every 10 seconds via a periodic interval:
-
-**Location:** `/packages/daemon/src/watcher.ts:190-196`
-
-```typescript
-this.staleCheckInterval = setInterval(() => {
-  this.checkStaleSessions();
-  this.updateLiveStatus();
-}, 10_000); // Check every 10 seconds
-```
-
-### UI Display
-
-Live sessions display a green "LIVE" badge:
-
-**Location:** `/packages/ui/src/components/SessionTable.tsx:123-127`
-
-```tsx
-{session.isLive && (
-  <Badge color="green" variant="soft" size="1">
-    LIVE
-  </Badge>
-)}
-```
-
-### Known Limitation: Multiple Sessions Per Directory
-
-**Problem:** If multiple Claude sessions with active terminals run in the same directory, ALL sessions in that directory are marked as "LIVE" because we can't distinguish which process owns which session file.
-
-**Example:**
-```
-User runs: claude "fix bug" (in terminal 1)
-User runs: claude "add feature" (in terminal 2, same directory)
-```
-
-Result: Both sessions show as LIVE because they share the same `cwd`.
-
-**Why we can't fix this:**
-- Session files don't have unique identifying information that processes expose
-- Process cmdline args don't include session IDs
-- File handles show daemon PID, not Claude PID
-
-**Workaround:** Run Claude sessions from different directories when possible.
-
-**Note:** Background Claude sessions (TTY = `??`) are now correctly excluded from live detection as of the TTY filter update.
-
----
 
 ## Git Repository Grouping
 
@@ -472,16 +333,7 @@ function calculateRepoActivityScore(sessions: Session[]): number {
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 4. Live Detection (every 10 seconds)                        │
-│    /packages/daemon/src/watcher.ts:detectLiveSessions()     │
-│    - pgrep -x claude → get PIDs                             │
-│    - lsof -p <pid> | grep cwd → get working directories     │
-│    - Match sessions to live cwds                            │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 5. Git Info Lookup (cached)                                 │
+│ 4. Git Info Lookup (cached)                                 │
 │    /packages/daemon/src/git.ts                              │
 │    - Parse .git/config for remote URL                       │
 │    - Parse .git/HEAD for branch name                        │
@@ -490,7 +342,7 @@ function calculateRepoActivityScore(sessions: Session[]): number {
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 6. StreamServer publishes to Durable Streams               │
+│ 5. StreamServer publishes to Durable Streams               │
 │    /packages/daemon/src/server.ts                           │
 │    - Convert SessionState to Session schema                 │
 │    - Generate AI goal + summary (cached/periodic)           │
@@ -500,14 +352,14 @@ function calculateRepoActivityScore(sessions: Session[]): number {
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 7. UI receives updates via Durable Streams                  │
+│ 6. UI receives updates via Durable Streams                  │
 │    http://127.0.0.1:4450/sessions                           │
 │    /packages/ui/src/data/sessionsDb.ts                      │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 8. TanStack StreamDB + useLiveQuery                         │
+│ 7. TanStack StreamDB + useLiveQuery                         │
 │    /packages/ui/src/hooks/useSessions.ts                    │
 │    - Reactive query on sessions collection                  │
 │    - Auto-updates when stream receives events               │
@@ -515,11 +367,10 @@ function calculateRepoActivityScore(sessions: Session[]): number {
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 9. UI Components render sessions                            │
+│ 8. UI Components render sessions                            │
 │    /packages/ui/src/components/SessionTable.tsx             │
 │    - Compute effective status (working/approval/waiting/idle)│
 │    - Group by repo, sort by activity score                  │
-│    - Display live badge for active processes                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -529,7 +380,6 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 |-----------|---------------|------------------|
 | `SessionWatcher` | Watch session files and signals | Real-time (chokidar events) |
 | `status-machine.ts` | Derive status from log entries | On every new JSONL entry |
-| `detectLiveSessions()` | Check for active Claude processes | Every 10 seconds |
 | `getGitInfoCached()` | Extract repo + branch from .git | Cached (1 minute TTL) |
 | `StreamServer` | Publish session state to stream | On session create/update/delete |
 | `useLiveQuery()` | Query sessions from StreamDB | Real-time (stream updates) |
@@ -539,19 +389,7 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 
 ## Known Limitations
 
-### 1. Multiple Sessions Per Directory
-
-**Problem:** Cannot distinguish which Claude process owns which session when multiple sessions run in the same directory.
-
-**Impact:** ~~All sessions in a directory are marked LIVE if any Claude process is running in that directory.~~ **Fixed:** Now only the most recent session per directory is marked LIVE.
-
-**Mitigation:** The `detectLiveSessions()` function now tracks the most recent session per `cwd` by `lastActivityAt` timestamp, ensuring only one LIVE badge per directory.
-
-**Technical Reason:** Session files don't contain unique identifiers that are exposed via process inspection tools (lsof, ps).
-
-**Related:** See `docs/solutions/ui-bugs/multiple-sessions-showing-live-20260122.md` for the fix details.
-
-### 2. Daemon File Locking
+### 1. Daemon File Locking
 
 **Problem:** The daemon opens all session files via `chokidar` for watching, so `lsof <session-file>` always returns the daemon PID.
 
@@ -559,7 +397,7 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 
 **Solution:** Use process working directory matching instead (current implementation).
 
-### 3. Missing turn_duration Events
+### 2. Missing turn_duration Events
 
 **Problem:** Sometimes Claude finishes a turn but doesn't write a `turn_duration` system event to the JSONL file.
 
@@ -569,7 +407,7 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 
 **Location:** `/packages/daemon/src/status-machine.ts:274-286`
 
-### 4. Branch Change Detection Delay
+### 3. Branch Change Detection Delay
 
 **Problem:** Branch changes are detected via git cache refresh (1 minute TTL).
 
@@ -577,7 +415,7 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 
 **Solution:** Could implement filesystem watching on `.git/HEAD` for instant detection.
 
-### 5. Non-GitHub Repositories
+### 4. Non-GitHub Repositories
 
 **Problem:** Git URL parsing only supports GitHub (HTTPS and SSH formats).
 
@@ -596,14 +434,6 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 | `/packages/daemon/src/status-machine.ts` | 1-324 | XState state machine for status detection |
 | `/packages/daemon/src/status.ts` | 1-71 | Status derivation entry point |
 | `/packages/daemon/src/watcher.ts` | 656-676 | Hook signal override logic |
-
-### Live Detection
-
-| File | Lines | Description |
-|------|-------|-------------|
-| `/packages/daemon/src/watcher.ts` | 459-501 | `detectLiveSessions()` - process CWD matching |
-| `/packages/daemon/src/watcher.ts` | 506-526 | `updateLiveStatus()` - emit updates on changes |
-| `/packages/daemon/src/watcher.ts` | 190-196 | Periodic interval (every 10s) |
 
 ### Git Repository Grouping
 
@@ -627,7 +457,6 @@ function calculateRepoActivityScore(sessions: Session[]): number {
 | `/packages/ui/src/hooks/useSessions.ts` | 12-33 | `useSessions()` - reactive session query |
 | `/packages/ui/src/hooks/useSessions.ts` | 74-94 | `groupSessionsByRepo()` - group by git repo |
 | `/packages/ui/src/components/SessionTable.tsx` | 23-37 | `getEffectiveStatus()` - UI idle detection |
-| `/packages/ui/src/components/SessionTable.tsx` | 123-127 | Live badge display |
 
 ### Schema Definitions
 
@@ -655,16 +484,6 @@ ls -la ~/.claude/session-signals/
 
 # View a specific signal
 cat ~/.claude/session-signals/<session-id>.permission.json
-```
-
-### Check which Claude processes are running
-
-```bash
-# Get PIDs
-pgrep -x claude
-
-# Get working directory for a PID
-lsof -p <pid> | grep cwd
 ```
 
 ### Manually derive status from JSONL
@@ -711,20 +530,7 @@ watch(`${gitDir}/HEAD`, { persistent: true })
   });
 ```
 
-### 2. Session ID in Process Cmdline
-
-If Claude CLI exposed session ID in process title or cmdline, we could accurately match processes to sessions:
-
-```bash
-# Current (doesn't help):
-ps aux | grep claude
-
-# Desired:
-claude --session-id=abc123 "my prompt"
-# Then: ps aux | grep abc123 → exact PID match
-```
-
-### 3. Support Non-GitHub Remotes
+### 2. Support Non-GitHub Remotes
 
 Extend `parseGitUrl()` to handle GitLab, Bitbucket, etc:
 
@@ -733,16 +539,7 @@ Extend `parseGitUrl()` to handle GitLab, Bitbucket, etc:
 const gitlabMatch = url.match(/^https?:\/\/gitlab\.com\/([^/]+)\/([^/\s]+)/);
 ```
 
-### 4. Persistent Live Status
-
-Currently, live status resets on daemon restart. Could persist to disk:
-
-```typescript
-// Save to ~/.claude/live-sessions.json on shutdown
-// Restore on startup for continuity
-```
-
-### 5. WebSocket for Real-Time Updates
+### 3. WebSocket for Real-Time Updates
 
 Durable Streams provides real-time updates, but adding WebSocket pings could reduce latency for status changes:
 
@@ -759,15 +556,13 @@ The session tracking system is a multi-layered architecture that:
 
 1. **Watches** session JSONL files and hook signal files via `chokidar`
 2. **Derives** status using an XState state machine with hook signal overrides
-3. **Detects** live sessions by matching Claude process working directories
-4. **Groups** sessions by GitHub repository via git URL parsing
-5. **Publishes** state to a Durable Streams server for real-time UI updates
-6. **Displays** sessions with computed effective status (working/approval/waiting/idle)
+3. **Groups** sessions by GitHub repository via git URL parsing
+4. **Publishes** state to a Durable Streams server for real-time UI updates
+5. **Displays** sessions with computed effective status (working/approval/waiting/idle)
 
 Key design decisions prioritize:
 - **Accuracy:** Hook signals override JSONL-derived status for immediate feedback
 - **Resilience:** Stale timeouts handle missing events
 - **Performance:** Caching for git info, debouncing for file changes
-- **Simplicity:** Process CWD matching is simpler than file handle inspection
 
-Known limitations exist around multiple sessions per directory and branch change detection delay, but the system is robust for typical single-session-per-directory workflows.
+Known limitations exist around branch change detection delay, but the system is robust for typical workflows.

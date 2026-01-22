@@ -1,39 +1,42 @@
 /**
- * AI-powered session summarization using Claude Sonnet
+ * AI-powered session summarization using Gemini
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import type { MessageCreateParamsNonStreaming } from "@anthropic-ai/sdk/resources/messages";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import fastq from "fastq";
 import type { queueAsPromised } from "fastq";
 import type { SessionState } from "./watcher.js";
 import type { LogEntry } from "./types.js";
 
 // Disable AI summarization (set to true to skip API calls)
-const AI_DISABLED = true;
+const AI_DISABLED = false;
 
 // Lazy-load client to ensure env vars are loaded first
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
+let client: GoogleGenerativeAI | null = null;
+function getClient(): GoogleGenerativeAI {
   if (!client) {
-    client = new Anthropic();
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is required");
+    }
+    client = new GoogleGenerativeAI(apiKey);
   }
   return client;
 }
 
-// Queue for Anthropic API calls to avoid rate limit errors
+// Queue for Gemini API calls to avoid rate limit errors
 interface APITask {
-  params: MessageCreateParamsNonStreaming;
+  prompt: string;
   resolve: (result: string) => void;
   reject: (error: Error) => void;
 }
 
 async function processAPITask(task: APITask): Promise<void> {
   try {
-    const response = await getClient().messages.create(task.params);
-    const text = response.content[0].type === "text"
-      ? response.content[0].text.trim()
-      : "";
+    const model = getClient().getGenerativeModel({ model: "gemini-2.0-flash" });
+    const result = await model.generateContent(task.prompt);
+    const response = result.response;
+    const text = response.text().trim();
     task.resolve(text);
   } catch (error) {
     task.reject(error as Error);
@@ -46,9 +49,9 @@ const apiQueue: queueAsPromised<APITask> = fastq.promise(processAPITask, 1);
 /**
  * Queue an API call and return the result
  */
-function queueAPICall(params: MessageCreateParamsNonStreaming): Promise<string> {
+function queueAPICall(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    apiQueue.push({ params, resolve, reject });
+    apiQueue.push({ prompt, resolve, reject });
   });
 }
 
@@ -140,21 +143,13 @@ export async function generateAISummary(session: SessionState): Promise<string> 
   try {
     const context = extractContext(session);
 
-    const summary = await queueAPICall({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 100,
-      messages: [
-        {
-          role: "user",
-          content: `Summarize this Claude Code session's current state in 5-10 words. Be specific about what was accomplished or what's being worked on. Don't use generic phrases like "working on code" - mention specific files, features, or tasks.
+    const prompt = `Summarize this Claude Code session's current state in 5-10 words. Be specific about what was accomplished or what's being worked on. Don't use generic phrases like "working on code" - mention specific files, features, or tasks.
 
 ${context}
 
-Summary:`,
-        },
-      ],
-    });
+Summary:`;
 
+    const summary = await queueAPICall(prompt);
     const result = summary || "Session active";
 
     // Cache the result
@@ -285,13 +280,7 @@ export async function generateGoal(session: SessionState): Promise<string> {
       }
     }
 
-    const goalResponse = await queueAPICall({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 30,
-      messages: [
-        {
-          role: "user",
-          content: `What is the HIGH-LEVEL GOAL of this coding session based on what's actually being built/done? Focus on the ACTUAL WORK. Respond with ONLY a short phrase (5-10 words max). No punctuation. No quotes.
+    const prompt = `What is the HIGH-LEVEL GOAL of this coding session based on what's actually being built/done? Focus on the ACTUAL WORK. Respond with ONLY a short phrase (5-10 words max). No punctuation. No quotes.
 
 Examples:
 - Build UI for monitoring sessions
@@ -300,11 +289,9 @@ Examples:
 
 ${context.join("\n")}
 
-Goal:`,
-        },
-      ],
-    });
+Goal:`;
 
+    const goalResponse = await queueAPICall(prompt);
     let goal = goalResponse || originalPrompt.slice(0, 50);
 
     // Clean up the response

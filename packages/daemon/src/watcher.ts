@@ -2,10 +2,6 @@ import { watch, type FSWatcher } from "chokidar";
 import { EventEmitter } from "node:events";
 import { readFile, unlink, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
-
-const execAsync = promisify(exec);
 import {
   tailJSONL,
   extractMetadata,
@@ -66,8 +62,6 @@ export interface SessionState {
   hasStopSignal?: boolean;
   // True when SessionEnd hook has fired (session closed)
   hasEndedSignal?: boolean;
-  // True when a Claude process has this session file open
-  isLive?: boolean;
 }
 
 export interface SessionEvent {
@@ -87,7 +81,6 @@ export class SessionWatcher extends EventEmitter {
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private debounceMs: number;
   private staleCheckInterval: NodeJS.Timeout | null = null;
-  private liveSessionIds = new Set<string>(); // Sessions with active Claude processes
 
   constructor(options: { debounceMs?: number } = {}) {
     super();
@@ -186,14 +179,9 @@ export class SessionWatcher extends EventEmitter {
 
     // Start periodic stale check to detect sessions that have gone idle
     // This catches cases where the turn ends but no turn_duration event is written
-    // Also check for live sessions (processes with session files open)
     this.staleCheckInterval = setInterval(() => {
       this.checkStaleSessions();
-      this.updateLiveStatus();
     }, 10_000); // Check every 10 seconds
-
-    // Do initial live status check
-    await this.updateLiveStatus();
   }
 
   /**
@@ -453,110 +441,6 @@ export class SessionWatcher extends EventEmitter {
     }
   }
 
-  /**
-   * Detect which sessions have live Claude processes by matching
-   * Claude process working directories to session cwds.
-   */
-  private async detectLiveSessions(): Promise<Set<string>> {
-    const liveSessionIds = new Set<string>();
-
-    try {
-      // Step 1: Get all Claude processes with TTY info
-      // ps aux format: USER PID %CPU %MEM VSZ RSS TTY STAT STARTED TIME COMMAND
-      const { stdout: psOut } = await execAsync("ps aux | grep -E 'claude$' | grep -v grep || true");
-      const lines = psOut.trim().split("\n").filter(Boolean);
-
-      if (lines.length === 0) {
-        return liveSessionIds;
-      }
-
-      // Step 2: Get working directory for each Claude process with active terminal
-      const liveCwds = new Set<string>();
-      for (const line of lines) {
-        const parts = line.trim().split(/\s+/);
-        if (parts.length < 11) continue; // Ensure we have all fields
-
-        const pid = parts[1];
-        const tty = parts[6];
-
-        // Skip background sessions (TTY = ??)
-        if (tty === "??") continue;
-
-        try {
-          const { stdout: lsofOut } = await execAsync(`lsof -p ${pid} 2>/dev/null | grep cwd || true`);
-          // lsof cwd line format: COMMAND PID USER FD TYPE ... NAME
-          const lsofParts = lsofOut.trim().split(/\s+/);
-          if (lsofParts.length > 0) {
-            const cwd = lsofParts[lsofParts.length - 1];
-            if (cwd && cwd.startsWith("/")) {
-              liveCwds.add(cwd);
-            }
-          }
-        } catch {
-          // Skip this PID if lsof fails
-        }
-      }
-
-      // Step 3: Match sessions to live cwds
-      // Only mark the MOST RECENT session per cwd as LIVE to reduce noise
-      // (older sessions in the same directory are not the active one)
-      const mostRecentByCwd = new Map<string, { sessionId: string; lastActivityAt: string }>();
-
-      for (const session of this.sessions.values()) {
-        if (liveCwds.has(session.cwd)) {
-          const existing = mostRecentByCwd.get(session.cwd);
-          const sessionActivity = session.status.lastActivityAt;
-          if (!existing || new Date(sessionActivity) > new Date(existing.lastActivityAt)) {
-            mostRecentByCwd.set(session.cwd, {
-              sessionId: session.sessionId,
-              lastActivityAt: sessionActivity,
-            });
-          }
-        }
-      }
-
-      for (const { sessionId } of mostRecentByCwd.values()) {
-        liveSessionIds.add(sessionId);
-      }
-    } catch {
-      // ps or lsof failed - return empty set
-    }
-
-    return liveSessionIds;
-  }
-
-  /**
-   * Update isLive status for all sessions and emit updates for changes.
-   */
-  private async updateLiveStatus(): Promise<void> {
-    const newLiveSessionIds = await this.detectLiveSessions();
-
-    for (const session of this.sessions.values()) {
-      const wasLive = this.liveSessionIds.has(session.sessionId);
-      const isNowLive = newLiveSessionIds.has(session.sessionId);
-
-      if (wasLive !== isNowLive) {
-        session.isLive = isNowLive;
-        log("Watcher", `Session ${session.sessionId.slice(0, 8)} isLive: ${wasLive} → ${isNowLive}`);
-
-        this.emit("session", {
-          type: "updated",
-          session,
-          previousStatus: session.status,
-        } satisfies SessionEvent);
-      }
-    }
-
-    this.liveSessionIds = newLiveSessionIds;
-  }
-
-  /**
-   * Check if a session is live (has an active Claude process).
-   */
-  isSessionLive(sessionId: string): boolean {
-    return this.liveSessionIds.has(sessionId);
-  }
-
   private debouncedHandleFile(filepath: string): void {
     // Clear existing timer for this file
     const existing = this.debounceTimers.get(filepath);
@@ -718,7 +602,6 @@ export class SessionWatcher extends EventEmitter {
         hasWorkingSignal: hasWorkingSig,
         hasStopSignal: hasStopSig,
         hasEndedSignal: hasEndedSig,
-        isLive: this.liveSessionIds.has(sessionId),
       };
 
       // Store session

@@ -118,20 +118,18 @@ function SessionRow({ session }: { session: Session }) {
       <HoverCard.Trigger>
         <Table.Row style={{ cursor: "pointer" }}>
           <Table.Cell>
-            <Flex align="center" gap="2" wrap="nowrap">
-              <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)", whiteSpace: "nowrap" }}>
-                {statusDisplay.symbol} {statusDisplay.label}
-              </Text>
-              {session.isLive && (
-                <Badge color="green" variant="soft" size="1">
-                  LIVE
-                </Badge>
-              )}
-            </Flex>
+            <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)" }}>
+              {statusDisplay.symbol} {statusDisplay.label}
+            </Text>
           </Table.Cell>
           <Table.Cell>
             <Text color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
               {dirPath}
+            </Text>
+          </Table.Cell>
+          <Table.Cell>
+            <Text color="gray">
+              {session.goal || session.originalPrompt.slice(0, 40)}
             </Text>
           </Table.Cell>
           <Table.Cell>
@@ -316,6 +314,7 @@ export function SessionTable({ sessions }: SessionTableProps) {
         <Table.Row>
           <Table.ColumnHeaderCell style={{ width: 160 }}>Status</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>Directory</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Goal</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>Branch</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell style={{ width: 60 }}>Age</Table.ColumnHeaderCell>
         </Table.Row>

@@ -55,7 +55,6 @@ export const SessionSchema = z.object({
   summary: z.string(), // Current activity summary
   recentOutput: z.array(RecentOutputSchema),
   pr: PRInfoSchema.nullable(), // Associated PR if branch has one
-  isLive: z.boolean(), // True if a Claude process is actively running this session
 });
 export type Session = z.infer<typeof SessionSchema>;
 

@@ -136,7 +136,6 @@ export class StreamServer {
       summary,
       recentOutput: extractRecentOutput(sessionState.entries),
       pr,
-      isLive: sessionState.isLive ?? false,
     };
 
     // Create the event using the schema helpers
@@ -185,7 +184,6 @@ export class StreamServer {
       summary,
       recentOutput: extractRecentOutput(sessionState.entries),
       pr,
-      isLive: sessionState.isLive ?? false,
     };
 
     const event = sessionsStateSchema.sessions.update({ value: session });
