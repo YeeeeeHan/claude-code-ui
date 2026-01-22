@@ -461,23 +461,33 @@ export class SessionWatcher extends EventEmitter {
     const liveSessionIds = new Set<string>();
 
     try {
-      // Step 1: Get all Claude process PIDs
-      const { stdout: pgrepOut } = await execAsync("pgrep -x claude 2>/dev/null || true");
-      const pids = pgrepOut.trim().split("\n").filter(Boolean);
+      // Step 1: Get all Claude processes with TTY info
+      // ps aux format: USER PID %CPU %MEM VSZ RSS TTY STAT STARTED TIME COMMAND
+      const { stdout: psOut } = await execAsync("ps aux | grep -E 'claude$' | grep -v grep || true");
+      const lines = psOut.trim().split("\n").filter(Boolean);
 
-      if (pids.length === 0) {
+      if (lines.length === 0) {
         return liveSessionIds;
       }
 
-      // Step 2: Get working directory for each Claude process
+      // Step 2: Get working directory for each Claude process with active terminal
       const liveCwds = new Set<string>();
-      for (const pid of pids) {
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 11) continue; // Ensure we have all fields
+
+        const pid = parts[1];
+        const tty = parts[6];
+
+        // Skip background sessions (TTY = ??)
+        if (tty === "??") continue;
+
         try {
           const { stdout: lsofOut } = await execAsync(`lsof -p ${pid} 2>/dev/null | grep cwd || true`);
           // lsof cwd line format: COMMAND PID USER FD TYPE ... NAME
-          const parts = lsofOut.trim().split(/\s+/);
-          if (parts.length > 0) {
-            const cwd = parts[parts.length - 1];
+          const lsofParts = lsofOut.trim().split(/\s+/);
+          if (lsofParts.length > 0) {
+            const cwd = lsofParts[lsofParts.length - 1];
             if (cwd && cwd.startsWith("/")) {
               liveCwds.add(cwd);
             }
@@ -494,7 +504,7 @@ export class SessionWatcher extends EventEmitter {
         }
       }
     } catch {
-      // pgrep or lsof failed - return empty set
+      // ps or lsof failed - return empty set
     }
 
     return liveSessionIds;
