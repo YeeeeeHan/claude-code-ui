@@ -1,5 +1,16 @@
 # SSE Implementation Plan
 
+> **STATUS: ✅ IMPLEMENTED**
+> See [SSE-IMPLEMENTATION.md](./SSE-IMPLEMENTATION.md) for implementation details.
+>
+> **Key Changes:**
+> - Patched `@durable-streams/state` to support `live: "sse"` option
+> - Updated UI client to use SSE mode
+> - Server already had SSE support built-in
+> - Expected improvement: 20-100x faster notifications (<100ms vs 2-10s)
+
+---
+
 ## Current State: Long-Polling Bottleneck
 
 ### Architecture

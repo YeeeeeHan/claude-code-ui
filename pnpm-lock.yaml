@@ -7,6 +7,14 @@ settings:
 overrides:
   '@tanstack/db': 0.5.22
 
+patchedDependencies:
+  '@durable-streams/client@0.1.5':
+    hash: 5eectu5v4bf35x5p7rs6k6espe
+    path: patches/@durable-streams__client@0.1.5.patch
+  '@durable-streams/state@0.1.5':
+    hash: 5egfaa6gutavoj7twjg3v4nm4y
+    path: patches/@durable-streams__state@0.1.5.patch
+
 importers:
 
   .:
@@ -24,18 +32,18 @@ importers:
 
   packages/daemon:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.71.2
-        version: 0.71.2(zod@4.3.5)
       '@durable-streams/client':
         specifier: ^0.1.5
-        version: 0.1.5
+        version: 0.1.5(patch_hash=5eectu5v4bf35x5p7rs6k6espe)
       '@durable-streams/server':
         specifier: ^0.1.6
         version: 0.1.6(typescript@5.9.3)
       '@durable-streams/state':
         specifier: ^0.1.5
-        version: 0.1.5(typescript@5.9.3)
+        version: 0.1.5(patch_hash=5egfaa6gutavoj7twjg3v4nm4y)(typescript@5.9.3)
+      '@google/generative-ai':
+        specifier: ^0.21.0
+        version: 0.21.0
       chokidar:
         specifier: ^4.0.3
         version: 4.0.3
@@ -66,10 +74,10 @@ importers:
     dependencies:
       '@durable-streams/client':
         specifier: ^0.1.5
-        version: 0.1.5
+        version: 0.1.5(patch_hash=5eectu5v4bf35x5p7rs6k6espe)
       '@durable-streams/state':
         specifier: ^0.1.5
-        version: 0.1.5(typescript@5.9.3)
+        version: 0.1.5(patch_hash=5egfaa6gutavoj7twjg3v4nm4y)(typescript@5.9.3)
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
@@ -163,19 +171,6 @@ importers:
         version: 0.1.3
 
 packages:
-
-  /@anthropic-ai/sdk@0.71.2(zod@4.3.5):
-    resolution: {integrity: sha512-TGNDEUuEstk/DKu0/TflXAEt+p+p/WhTlFzEnoosvbaDU2LTjm42igSdlL0VijrKpWejtOKxX0b8A7uc+XiSAQ==}
-    hasBin: true
-    peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
-    peerDependenciesMeta:
-      zod:
-        optional: true
-    dependencies:
-      json-schema-to-ts: 3.1.1
-      zod: 4.3.5
-    dev: false
 
   /@babel/code-frame@7.28.6:
     resolution: {integrity: sha512-JYgintcMjRiCvS8mMECzaEn+m3PfoQiyqukOMCCVQtoJGYJw8j/8LBJEiqkHLkfwCcs74E3pbAUFNg7d9VNJ+Q==}
@@ -392,36 +387,38 @@ packages:
     resolution: {integrity: sha512-5uL1EIhAlfg0dvWsR1DGfqIsyiPBUsD/qlra15B82Ik28BcH7ScYEHLA4F34fZA0KamlpYcappvt2n1pTuDUfw==}
     dev: true
 
-  /@durable-streams/client@0.1.5:
+  /@durable-streams/client@0.1.5(patch_hash=5eectu5v4bf35x5p7rs6k6espe):
     resolution: {integrity: sha512-vZu55GqSebViYx+L+Ff6Xfr1SOZPPwvJqPLIOtUIzv5WtMJ6e4wWtHDFqCa4OhQyN7MeczVzgo7/u6IIJnQXuA==}
     engines: {node: '>=18.0.0'}
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1
       fastq: 1.20.1
     dev: false
+    patched: true
 
   /@durable-streams/server@0.1.6(typescript@5.9.3):
     resolution: {integrity: sha512-lr31CKKRS9FuRG+iFwFOlHEEJ7u7OS+Ib7cS1ukZXO/YCJPulm5BRUz+qeF/P0/5PkN/r58V7MBS1x/cPTccCw==}
     engines: {node: '>=18.0.0'}
     dependencies:
-      '@durable-streams/client': 0.1.5
-      '@durable-streams/state': 0.1.5(typescript@5.9.3)
+      '@durable-streams/client': 0.1.5(patch_hash=5eectu5v4bf35x5p7rs6k6espe)
+      '@durable-streams/state': 0.1.5(patch_hash=5egfaa6gutavoj7twjg3v4nm4y)(typescript@5.9.3)
       '@neophi/sieve-cache': 1.5.0
       lmdb: 3.4.4
     transitivePeerDependencies:
       - typescript
     dev: false
 
-  /@durable-streams/state@0.1.5(typescript@5.9.3):
+  /@durable-streams/state@0.1.5(patch_hash=5egfaa6gutavoj7twjg3v4nm4y)(typescript@5.9.3):
     resolution: {integrity: sha512-MGCKO0o9/X2qyz4SawVTaoFEB2ejmcvCI6UnbhsDRdeM6NOacN/8Qq+kTRe+WbpQLT0qs8v+Ke+MwlamSzSFXg==}
     engines: {node: '>=18.0.0'}
     dependencies:
-      '@durable-streams/client': 0.1.5
+      '@durable-streams/client': 0.1.5(patch_hash=5eectu5v4bf35x5p7rs6k6espe)
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.5.22(typescript@5.9.3)
     transitivePeerDependencies:
       - typescript
     dev: false
+    patched: true
 
   /@esbuild/aix-ppc64@0.23.1:
     resolution: {integrity: sha512-6VhYk1diRqrhBAqpJEdjASR/+WVRtfjpqKuNw11cLiaWpAT/Uu+nokB+UJnevzy/P9C/ty6AOe0dwueMrGh/iQ==}
@@ -1220,6 +1217,11 @@ packages:
 
   /@fontsource-variable/space-grotesk@5.2.10:
     resolution: {integrity: sha512-yJQO/o35/hAP3CFnpdFTwQku2yzJOae2HIpBmqkOVoxhhXJaQP3g+b6Jrz7u+eI7A5ZdCIf88uMWpBJdFiGr5w==}
+    dev: false
+
+  /@google/generative-ai@0.21.0:
+    resolution: {integrity: sha512-7XhUbtnlkSEZK15kN3t+tzIMxsbKm/dSkKBFalj+20NvPKe1kBY7mR2P7vuijEn+f06z5+A8bVGKO0v39cr6Wg==}
+    engines: {node: '>=18.0.0'}
     dev: false
 
   /@humanfs/core@0.19.1:
@@ -4473,14 +4475,6 @@ packages:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
     dev: true
 
-  /json-schema-to-ts@3.1.1:
-    resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
-    engines: {node: '>=16'}
-    dependencies:
-      '@babel/runtime': 7.28.6
-      ts-algebra: 2.0.0
-    dev: false
-
   /json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
     dev: true
@@ -5721,10 +5715,6 @@ packages:
 
   /trough@2.2.0:
     resolution: {integrity: sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==}
-    dev: false
-
-  /ts-algebra@2.0.0:
-    resolution: {integrity: sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw==}
     dev: false
 
   /ts-api-utils@2.4.0(typescript@5.9.3):

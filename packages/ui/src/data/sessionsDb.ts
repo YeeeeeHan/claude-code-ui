@@ -19,11 +19,25 @@ export async function getSessionsDb(): Promise<SessionsDB> {
 
   if (!dbPromise) {
     dbPromise = (async () => {
-      const db = await createStreamDB({
-        streamOptions: {
-          url: STREAM_URL,
-          contentType: "application/json",
+      const streamOptions = {
+        url: STREAM_URL,
+        // contentType tells the server what format to send in each SSE data: line
+        contentType: "application/json",
+        // Enable Server-Sent Events for real-time updates (<100ms latency vs 2-10s with long-polling)
+        live: "sse" as const,
+        // Required: hint that SSE data is JSON (Content-Type is text/event-stream for SSE)
+        json: true,
+        // Fallback to long-polling if SSE fails repeatedly
+        sseResilience: {
+          maxShortConnections: 3,
+          logWarnings: true,
         },
+      };
+
+      console.log('[SessionsDB] Creating StreamDB with options:', streamOptions);
+
+      const db = await createStreamDB({
+        streamOptions,
         state: sessionsStateSchema,
       });
 

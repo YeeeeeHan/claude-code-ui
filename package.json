@@ -26,6 +26,10 @@
   "pnpm": {
     "overrides": {
       "@tanstack/db": "0.5.22"
+    },
+    "patchedDependencies": {
+      "@durable-streams/state@0.1.5": "patches/@durable-streams__state@0.1.5.patch",
+      "@durable-streams/client@0.1.5": "patches/@durable-streams__client@0.1.5.patch"
     }
   }
 }

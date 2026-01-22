@@ -1,0 +1,58 @@
+diff --git a/dist/index.js b/dist/index.js
+index b4de721a8a3973f36091f0d73db0af8012eb8022..e23516a5a380355b679b6237ffd00de3954dd388 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -813,13 +813,34 @@ var StreamResponseImpl = class {
+ 	* Process an SSE data event by waiting for its corresponding control event.
+ 	* In SSE protocol, control events come AFTER data events.
+ 	* Multiple data events may arrive before a single control event - we buffer them.
++	* FIX: Parse and flatten data to handle both single items and arrays properly.
+ 	*/
+ 	async #processSSEDataEvent(pendingData, sseEventIterator) {
+-		let bufferedData = pendingData;
++		let bufferedData = [pendingData];
++		const mergeBufferedData = () => {
++			if (bufferedData.length === 1) return bufferedData[0];
++			// Parse each item and flatten arrays into a single array
++			const allItems = [];
++			for (const data of bufferedData) {
++				try {
++					const parsed = JSON.parse(data);
++					if (Array.isArray(parsed)) {
++						allItems.push(...parsed);
++					} else {
++						allItems.push(parsed);
++					}
++				} catch {
++					// If parsing fails, keep as raw string (shouldn't happen for valid JSON)
++					return bufferedData.join('');
++				}
++			}
++			return JSON.stringify(allItems);
++		};
+ 		while (true) {
+ 			const { done: controlDone, value: controlEvent } = await sseEventIterator.next();
+ 			if (controlDone) {
+-				const response = this.#createSSESyntheticResponse(bufferedData, this.offset, this.cursor, this.upToDate);
++				const data = mergeBufferedData();
++				const response = this.#createSSESyntheticResponse(data, this.offset, this.cursor, this.upToDate);
+ 				try {
+ 					const newIterator = await this.#trySSEReconnect();
+ 					return {
+@@ -836,13 +857,14 @@ var StreamResponseImpl = class {
+ 			}
+ 			if (controlEvent.type === `control`) {
+ 				this.#updateStateFromSSEControl(controlEvent);
+-				const response = this.#createSSESyntheticResponse(bufferedData, controlEvent.streamNextOffset, controlEvent.streamCursor, controlEvent.upToDate ?? false);
++				const data = mergeBufferedData();
++				const response = this.#createSSESyntheticResponse(data, controlEvent.streamNextOffset, controlEvent.streamCursor, controlEvent.upToDate ?? false);
+ 				return {
+ 					type: `response`,
+ 					response
+ 				};
+ 			}
+-			bufferedData += controlEvent.data;
++			bufferedData.push(controlEvent.data);
+ 		}
+ 	}
+ 	/**
