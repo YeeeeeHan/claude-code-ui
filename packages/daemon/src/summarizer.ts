@@ -9,6 +9,9 @@ import type { queueAsPromised } from "fastq";
 import type { SessionState } from "./watcher.js";
 import type { LogEntry } from "./types.js";
 
+// Disable AI summarization (set to true to skip API calls)
+const AI_DISABLED = true;
+
 // Lazy-load client to ensure env vars are loaded first
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -119,6 +122,11 @@ export async function generateAISummary(session: SessionState): Promise<string> 
 
   if (status.status === "working") {
     return getWorkingSummary(session);
+  }
+
+  // Skip AI if disabled
+  if (AI_DISABLED) {
+    return getFallbackSummary(session);
   }
 
   // Check cache
@@ -236,8 +244,8 @@ export async function generateGoal(session: SessionState): Promise<string> {
     return cached.goal;
   }
 
-  // For new sessions, use the original prompt
-  if (entries.length < 5) {
+  // For new sessions or when AI is disabled, use the original prompt
+  if (entries.length < 5 || AI_DISABLED) {
     return cleanGoalText(originalPrompt);
   }
 
