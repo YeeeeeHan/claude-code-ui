@@ -303,7 +303,8 @@ export function SessionTable({ sessions }: SessionTableProps) {
     if (aPriority !== bPriority) {
       return aPriority - bPriority;
     }
-    return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
+    // Sort alphabetically by directory path within same status tier
+    return a.cwd.localeCompare(b.cwd);
   });
 
   return (
