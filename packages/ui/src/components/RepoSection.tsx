@@ -1,20 +1,6 @@
 import { Box, Flex, Heading, Link, Text, Separator } from "@radix-ui/themes";
-import { KanbanColumn } from "./KanbanColumn";
-import type { Session, SessionStatus } from "../data/schema";
-
-const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour - match daemon setting
-
-/**
- * Get effective status based on elapsed time since last activity.
- * Sessions inactive for 1 hour are considered idle regardless of stored status.
- */
-function getEffectiveStatus(session: Session): SessionStatus {
-  const elapsed = Date.now() - new Date(session.lastActivityAt).getTime();
-  if (elapsed > IDLE_TIMEOUT_MS) {
-    return "idle";
-  }
-  return session.status;
-}
+import { SessionTable } from "./SessionTable";
+import type { Session } from "../data/schema";
 
 interface RepoSectionProps {
   repoId: string;
@@ -24,16 +10,6 @@ interface RepoSectionProps {
 }
 
 export function RepoSection({ repoId, repoUrl, sessions, activityScore }: RepoSectionProps) {
-  // Use effective status to categorize sessions (accounts for time-based idle)
-  const working = sessions.filter((s) => getEffectiveStatus(s) === "working");
-  const needsApproval = sessions.filter(
-    (s) => getEffectiveStatus(s) === "waiting" && s.hasPendingToolUse
-  );
-  const waiting = sessions.filter(
-    (s) => getEffectiveStatus(s) === "waiting" && !s.hasPendingToolUse
-  );
-  const idle = sessions.filter((s) => getEffectiveStatus(s) === "idle");
-
   const isHot = activityScore > 50;
 
   return (
@@ -60,32 +36,7 @@ export function RepoSection({ repoId, repoUrl, sessions, activityScore }: RepoSe
         </Text>
       </Flex>
 
-      <Flex gap="3" style={{ minHeight: 240 }}>
-        <KanbanColumn
-          title="Working"
-          status="working"
-          sessions={working}
-          color="green"
-        />
-        <KanbanColumn
-          title="Needs Approval"
-          status="needs-approval"
-          sessions={needsApproval}
-          color="orange"
-        />
-        <KanbanColumn
-          title="Waiting"
-          status="waiting"
-          sessions={waiting}
-          color="yellow"
-        />
-        <KanbanColumn
-          title="Idle"
-          status="idle"
-          sessions={idle}
-          color="gray"
-        />
-      </Flex>
+      <SessionTable sessions={sessions} />
 
       <Separator size="4" mt="6" />
     </Box>
