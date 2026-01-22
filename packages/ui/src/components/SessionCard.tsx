@@ -112,8 +112,9 @@ function getCIStatusColor(status: CIStatus): "green" | "red" | "yellow" | "gray"
 
 export function SessionCard({ session, disableHover }: SessionCardProps) {
   const showPendingTool = session.hasPendingToolUse && session.pendingTool;
-  // Show path from ~ (e.g., ~/programs/project)
-  const dirPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
+  // Show only last 2 levels of the path (e.g., "useful_resources/claude-code-ui")
+  const parts = session.cwd.split("/");
+  const dirPath = parts.slice(-2).join("/");
 
   return (
     <HoverCard.Root openDelay={750} open={disableHover ? false : undefined}>

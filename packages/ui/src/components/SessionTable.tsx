@@ -109,14 +109,16 @@ function getCIStatusColor(status: CIStatus): "green" | "red" | "yellow" | "gray"
 function SessionRow({ session }: { session: Session }) {
   const effectiveStatus = getEffectiveStatus(session);
   const statusDisplay = getStatusDisplay(effectiveStatus);
-  const dirPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
+  // Show only last 2 levels of the path (e.g., "useful_resources/claude-code-ui")
+  const parts = session.cwd.split("/");
+  const dirPath = parts.slice(-2).join("/");
 
   return (
     <HoverCard.Root openDelay={400}>
       <HoverCard.Trigger>
         <Table.Row style={{ cursor: "pointer" }}>
           <Table.Cell>
-            <Flex align="center" gap="2" wrap="nowrap">
+            <Flex align="center" gap="2" wrap="wrap">
               <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)" }}>
                 {statusDisplay.symbol} {statusDisplay.label}
               </Text>
