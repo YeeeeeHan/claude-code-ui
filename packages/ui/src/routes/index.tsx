@@ -3,6 +3,7 @@ import { Flex, Text } from "@radix-ui/themes";
 import { useEffect, useState } from "react";
 import { RepoSection } from "../components/RepoSection";
 import { useSessions, groupSessionsByRepo } from "../hooks/useSessions";
+import { requestNotificationPermission, checkAndNotify } from "../utils/notifications";
 
 export const Route = createFileRoute("/")({
   component: IndexPage,
@@ -17,6 +18,16 @@ function IndexPage() {
     const interval = setInterval(() => setTick((t) => t + 1), 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  // Watch for session state transitions and notify
+  useEffect(() => {
+    checkAndNotify(sessions);
+  }, [sessions]);
 
   const repoGroups = groupSessionsByRepo(sessions);
 
