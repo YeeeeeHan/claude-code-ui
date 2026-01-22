@@ -21,7 +21,8 @@ if [ -n "$SESSION_ID" ]; then
   # Write session-ended signal with timestamp
   echo "$INPUT" | jq -c '. + {ended_at: (now | tostring)}' > "$SIGNALS_DIR/$SESSION_ID.ended.json"
 
-  # Clean up other signals for this session
+  # Clean up ALL other signals for this session
+  rm -f "$SIGNALS_DIR/$SESSION_ID.working.json"
   rm -f "$SIGNALS_DIR/$SESSION_ID.permission.json"
   rm -f "$SIGNALS_DIR/$SESSION_ID.stop.json"
 fi

@@ -185,6 +185,10 @@ export class SessionWatcher extends EventEmitter {
     // Load any existing signal files
     await this.loadExistingSignals();
 
+    // Reconcile existing sessions with loaded signals
+    // (needed because signals are loaded after JSONL files are scanned)
+    this.reconcileSessionsWithSignals();
+
     // Start periodic stale check to detect sessions that have gone idle
     // This catches cases where the turn ends but no turn_duration event is written
     // Also update process detection to track which sessions have running Claude processes
@@ -210,6 +214,54 @@ export class SessionWatcher extends EventEmitter {
       }
     } catch {
       // Directory doesn't exist or can't be read - that's fine
+    }
+  }
+
+  /**
+   * Reconcile existing sessions with loaded signal files.
+   * Called after loadExistingSignals() to update sessions that were
+   * created before signals were loaded.
+   */
+  private reconcileSessionsWithSignals(): void {
+    for (const session of this.sessions.values()) {
+      const sessionId = session.sessionId;
+      const hasEndedSig = this.endedSignals.has(sessionId);
+      const hasWorkingSig = this.workingSignals.has(sessionId);
+      const hasStopSig = this.stopSignals.has(sessionId);
+      const pendingPermission = this.pendingPermissions.get(sessionId);
+
+      const previousStatus = session.status;
+      let newStatus = { ...session.status };
+
+      // Apply same priority logic as handleFile
+      if (hasEndedSig) {
+        newStatus.status = "idle";
+        newStatus.hasPendingToolUse = false;
+        session.hasEndedSignal = true;
+      } else if (pendingPermission) {
+        newStatus.status = "waiting";
+        newStatus.hasPendingToolUse = true;
+        session.pendingPermission = pendingPermission;
+      } else if (hasStopSig) {
+        newStatus.status = "waiting";
+        newStatus.hasPendingToolUse = false;
+        session.hasStopSignal = true;
+      } else if (hasWorkingSig) {
+        newStatus.status = "working";
+        newStatus.hasPendingToolUse = false;
+        session.hasWorkingSignal = true;
+      }
+
+      // Update session and emit if changed
+      if (statusChanged(previousStatus, newStatus)) {
+        session.status = newStatus;
+        log("Watcher", `Reconciled ${sessionId.slice(0, 8)}: ${previousStatus.status} → ${newStatus.status}`);
+        this.emit("session", {
+          type: "updated",
+          session,
+          previousStatus,
+        } satisfies SessionEvent);
+      }
     }
   }
 
