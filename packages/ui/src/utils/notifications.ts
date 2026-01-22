@@ -81,11 +81,11 @@ export function notifyApproval(session: Session): void {
       : session.pendingTool.target;
     context = `${toolEmoji} ${session.pendingTool.tool}: ${target}`;
   } else {
-    context = session.summary?.slice(0, 100) || 'Tool use approval required';
+    context = session.summary?.slice(0, 120) || 'Tool use approval required';
   }
 
-  const notification = new Notification('Claude Code - Approval Needed', {
-    body: `${repoName}\n${context}`,
+  const notification = new Notification(repoName, {
+    body: context,
     icon: '/favicon.svg',
     requireInteraction: true, // User must dismiss (sticky)
     tag: `approval-${session.sessionId}`, // Prevents duplicate notifications
@@ -123,8 +123,8 @@ export function notifyWaiting(session: Session): void {
     context = session.summary?.slice(0, 120) || 'Waiting for your input';
   }
 
-  const notification = new Notification('Claude Code - Waiting for Input', {
-    body: `${repoName}\n${context}`,
+  const notification = new Notification(repoName, {
+    body: context,
     icon: '/favicon.svg',
     requireInteraction: true, // Keep visible until dismissed
     tag: `waiting-${session.sessionId}`, // Prevents duplicate notifications
