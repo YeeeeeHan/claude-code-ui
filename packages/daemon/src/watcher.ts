@@ -587,13 +587,18 @@ export class SessionWatcher extends EventEmitter {
           originalPrompt: existingSession.originalPrompt,
           startedAt: existingSession.startedAt,
         };
-        // Reuse cached git info
-        gitInfo = {
-          repoUrl: existingSession.gitRepoUrl,
-          repoId: existingSession.gitRepoId,
-          branch: existingSession.gitBranch,
-          isGitRepo: existingSession.gitRepoUrl !== null || existingSession.gitBranch !== null,
-        };
+        // Reuse cached git info, but refresh if repoId is missing
+        if (existingSession.gitRepoId) {
+          gitInfo = {
+            repoUrl: existingSession.gitRepoUrl,
+            repoId: existingSession.gitRepoId,
+            branch: existingSession.gitBranch,
+            isGitRepo: existingSession.gitRepoUrl !== null || existingSession.gitBranch !== null,
+          };
+        } else {
+          // Re-fetch git info if repoId was null (might have been a parse failure)
+          gitInfo = await getGitInfoCached(metadata.cwd);
+        }
       } else {
         metadata = extractMetadata(allEntries);
         if (!metadata) {

@@ -36,9 +36,9 @@ async function findGitDir(startPath: string): Promise<string | null> {
  * - https://github.com/owner/repo
  */
 function parseGitUrl(url: string): { repoUrl: string; repoId: string } | null {
-  // HTTPS format: https://github.com/owner/repo.git
+  // HTTPS format: https://github.com/owner/repo.git (also handles extra slashes)
   const httpsMatch = url.match(
-    /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/\s]+?)(?:\.git)?$/i
+    /^https?:\/\/(?:www\.)?github\.com\/+([^/]+)\/([^/\s]+?)(?:\.git)?$/i
   );
   if (httpsMatch) {
     const [, owner, repo] = httpsMatch;
@@ -48,9 +48,9 @@ function parseGitUrl(url: string): { repoUrl: string; repoId: string } | null {
     };
   }
 
-  // SSH format: git@github.com:owner/repo.git
+  // SSH format: git@github.com:owner/repo.git (also handles git@github.com:/owner/repo)
   const sshMatch = url.match(
-    /^git@github\.com:([^/]+)\/([^/\s]+?)(?:\.git)?$/i
+    /^git@github\.com:\/?([^/]+)\/([^/\s]+?)(?:\.git)?$/i
   );
   if (sshMatch) {
     const [, owner, repo] = sshMatch;
