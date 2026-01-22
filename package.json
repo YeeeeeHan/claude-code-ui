@@ -17,9 +17,15 @@
   },
   "packageManager": "pnpm@10.26.0",
   "devDependencies": {
+    "@types/node": "^25.0.10",
     "concurrently": "^9.2.1"
   },
   "dependencies": {
     "fastq": "^1.20.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@tanstack/db": "0.5.22"
+    }
   }
 }
