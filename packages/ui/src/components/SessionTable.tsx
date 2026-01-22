@@ -116,7 +116,7 @@ function SessionRow({ session }: { session: Session }) {
       <HoverCard.Trigger>
         <Table.Row style={{ cursor: "pointer" }}>
           <Table.Cell>
-            <Flex align="center" gap="2">
+            <Flex align="center" gap="2" wrap="nowrap">
               <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)" }}>
                 {statusDisplay.symbol} {statusDisplay.label}
               </Text>
@@ -313,7 +313,7 @@ export function SessionTable({ sessions }: SessionTableProps) {
     <Table.Root variant="surface">
       <Table.Header>
         <Table.Row>
-          <Table.ColumnHeaderCell style={{ width: 120 }}>Status</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell style={{ width: 160 }}>Status</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>Directory</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>Branch</Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell style={{ width: 60 }}>Age</Table.ColumnHeaderCell>
