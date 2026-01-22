@@ -20,11 +20,12 @@ export function useSessions() {
     [db]
   );
 
-  // Transform to array of sessions
-  // The query.data is a Map where values are the session objects directly
-  const sessions: Session[] = query?.data
+  // Transform to array of sessions and filter to only live sessions
+  const allSessions: Session[] = query?.data
     ? Array.from(query.data.values())
     : [];
+
+  const sessions = allSessions.filter((s) => s.isLive);
 
   return {
     sessions,

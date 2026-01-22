@@ -291,9 +291,8 @@ function SessionRow({ session }: { session: Session }) {
 }
 
 export function SessionTable({ sessions }: SessionTableProps) {
-  // Filter to only show live sessions, then sort by status priority and lastActivityAt
-  const liveSessions = sessions.filter((s) => s.isLive);
-  const sortedSessions = [...liveSessions].sort((a, b) => {
+  // Sort by status priority and lastActivityAt
+  const sortedSessions = [...sessions].sort((a, b) => {
     const statusPriority: Record<EffectiveStatus, number> = {
       working: 0,
       approval: 1,
