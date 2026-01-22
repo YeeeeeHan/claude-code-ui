@@ -116,9 +116,16 @@ function SessionRow({ session }: { session: Session }) {
       <HoverCard.Trigger>
         <Table.Row style={{ cursor: "pointer" }}>
           <Table.Cell>
-            <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)" }}>
-              {statusDisplay.symbol} {statusDisplay.label}
-            </Text>
+            <Flex align="center" gap="2">
+              <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)" }}>
+                {statusDisplay.symbol} {statusDisplay.label}
+              </Text>
+              {session.isLive && (
+                <Badge color="green" variant="soft" size="1">
+                  LIVE
+                </Badge>
+              )}
+            </Flex>
           </Table.Cell>
           <Table.Cell>
             <Text color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
@@ -284,8 +291,9 @@ function SessionRow({ session }: { session: Session }) {
 }
 
 export function SessionTable({ sessions }: SessionTableProps) {
-  // Sort sessions by status priority then by lastActivityAt
-  const sortedSessions = [...sessions].sort((a, b) => {
+  // Filter to only show live sessions, then sort by status priority and lastActivityAt
+  const liveSessions = sessions.filter((s) => s.isLive);
+  const sortedSessions = [...liveSessions].sort((a, b) => {
     const statusPriority: Record<EffectiveStatus, number> = {
       working: 0,
       approval: 1,
