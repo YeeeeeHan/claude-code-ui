@@ -75,6 +75,7 @@ export interface SessionEvent {
   type: "created" | "updated" | "deleted";
   session: SessionState;
   previousStatus?: StatusResult;
+  priority?: 'normal' | 'high'; // For fast-path routing (high = skip debounce + AI)
 }
 
 export class SessionWatcher extends EventEmitter {
@@ -324,7 +325,7 @@ export class SessionWatcher extends EventEmitter {
             status: "waiting",
             hasPendingToolUse: true,
           };
-          this.emit("session", { type: "updated", session, previousStatus } satisfies SessionEvent);
+          this.emit("session", { type: "updated", session, previousStatus, priority: 'high' } satisfies SessionEvent);
         }
       } else if (type === "stop") {
         const stopSignal = data as StopSignal;

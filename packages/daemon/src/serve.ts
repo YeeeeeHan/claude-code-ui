@@ -63,10 +63,10 @@ async function main(): Promise<void> {
   console.log();
 
   // Start the session watcher
-  const watcher = new SessionWatcher({ debounceMs: 300 });
+  const watcher = new SessionWatcher({ debounceMs: 100 });
 
   watcher.on("session", async (event: SessionEvent) => {
-    const { type, session } = event;
+    const { type, session, priority } = event;
 
     // Only publish recent sessions
     if (!isRecentSession(session) && type !== "deleted") {
@@ -78,10 +78,12 @@ async function main(): Promise<void> {
     // Log to console - show directory name for easier identification
     const statusStr = formatStatus(session.status);
     const dirName = session.cwd.split("/").pop() || session.cwd;
+    const priorityIndicator = priority === 'high' ? '⚡' : '';
+
     console.log(
       `${colors.gray}${timestamp}${colors.reset} ` +
       `${type === "created" ? colors.green : type === "deleted" ? colors.blue : colors.yellow}[${type.toUpperCase().slice(0, 3)}]${colors.reset} ` +
-      `${colors.cyan}${session.sessionId.slice(0, 8)}${colors.reset} ` +
+      `${priorityIndicator}${colors.cyan}${session.sessionId.slice(0, 8)}${colors.reset} ` +
       `${colors.dim}${dirName}${colors.reset} ` +
       `${statusStr}`
     );
@@ -89,7 +91,13 @@ async function main(): Promise<void> {
     // Publish to stream
     try {
       const operation = type === "created" ? "insert" : type === "deleted" ? "delete" : "update";
-      await streamServer.publishSession(session, operation);
+
+      // Route based on priority
+      if (priority === 'high') {
+        await streamServer.publishSessionFastPath(session, operation);
+      } else {
+        await streamServer.publishSession(session, operation);
+      }
     } catch (error) {
       console.error(`${colors.yellow}[ERROR]${colors.reset} Failed to publish:`, error);
     }

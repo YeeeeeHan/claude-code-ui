@@ -102,9 +102,15 @@ export class StreamServer {
     this.sessionCache.set(sessionState.sessionId, sessionState);
 
     // Generate AI goal and summary (goals are cached, summaries update more frequently)
+    // Skip AI summary for critical transitions (waiting/approval states) to reduce latency
+    const shouldGenerateSummary = sessionState.status.status === 'working' ||
+                                   sessionState.status.status === 'idle';
+
     const [goal, summary] = await Promise.all([
       generateGoal(sessionState),
-      generateAISummary(sessionState),
+      shouldGenerateSummary
+        ? generateAISummary(sessionState)
+        : Promise.resolve(getFastSummary(sessionState)),
     ]);
 
     // Get cached PR info if available (will be null if branch just changed)
@@ -191,6 +197,110 @@ export class StreamServer {
     const event = sessionsStateSchema.sessions.update({ value: session });
     await this.stream.append(event);
   }
+
+  /**
+   * Fast path: Publish session without AI generation
+   * Used for time-critical updates like permission requests
+   */
+  async publishSessionFastPath(sessionState: SessionState, operation: "insert" | "update" | "delete"): Promise<void> {
+    if (!this.stream) {
+      throw new Error("Server not started");
+    }
+
+    log("Server", `Fast-path publish for ${sessionState.sessionId.slice(0, 8)}`);
+
+    // Check branch change (same as publishSession)
+    const cachedSession = this.sessionCache.get(sessionState.sessionId);
+    const oldBranch = cachedSession?.gitBranch ?? null;
+    const branchChanged = oldBranch !== null && oldBranch !== sessionState.gitBranch;
+
+    if (branchChanged) {
+      log("PR", `Branch changed for ${sessionState.sessionId.slice(0, 8)}: ${oldBranch} → ${sessionState.gitBranch}`);
+      clearPRForSession(sessionState.sessionId, oldBranch, sessionState.cwd);
+    }
+
+    // Cache session state
+    this.sessionCache.set(sessionState.sessionId, sessionState);
+
+    // Use cached/fast values (no AI calls)
+    const goal = sessionState.originalPrompt.slice(0, 50);
+
+    let summary: string;
+    if (sessionState.pendingPermission) {
+      summary = `Approval needed: ${sessionState.pendingPermission.tool_name}`;
+    } else if (sessionState.status.status === 'waiting') {
+      summary = 'Waiting for input';
+    } else {
+      summary = sessionState.originalPrompt.slice(0, 50);
+    }
+
+    const pr = sessionState.gitBranch
+      ? getCachedPR(sessionState.cwd, sessionState.gitBranch)
+      : null;
+
+    const session: Session = {
+      sessionId: sessionState.sessionId,
+      cwd: sessionState.cwd,
+      gitBranch: sessionState.gitBranch,
+      gitRepoUrl: sessionState.gitRepoUrl,
+      gitRepoId: sessionState.gitRepoId,
+      originalPrompt: sessionState.originalPrompt,
+      status: sessionState.status.status,
+      lastActivityAt: sessionState.status.lastActivityAt,
+      messageCount: sessionState.status.messageCount,
+      hasPendingToolUse: sessionState.status.hasPendingToolUse,
+      pendingTool: extractPendingTool(sessionState),
+      goal,
+      summary,
+      recentOutput: extractRecentOutput(sessionState.entries),
+      pr,
+      hasProcess: sessionState.hasProcess ?? false,
+    };
+
+    let event;
+    if (operation === "insert") {
+      event = sessionsStateSchema.sessions.insert({ value: session });
+    } else if (operation === "update") {
+      event = sessionsStateSchema.sessions.update({ value: session });
+    } else {
+      event = sessionsStateSchema.sessions.delete({
+        key: session.sessionId,
+        oldValue: session,
+      });
+    }
+
+    await this.stream.append(event);
+  }
+}
+
+/**
+ * Get fast summary without AI for critical transitions
+ */
+function getFastSummary(sessionState: SessionState): string {
+  const { status } = sessionState;
+
+  // For approval states, use pending tool info
+  if (status.hasPendingToolUse && sessionState.pendingPermission) {
+    return `Approval needed: ${sessionState.pendingPermission.tool_name}`;
+  }
+
+  // For waiting states, extract last assistant message
+  if (status.status === 'waiting') {
+    const lastAssistant = [...sessionState.entries]
+      .reverse()
+      .find((e) => e.type === "assistant");
+
+    if (lastAssistant && lastAssistant.type === "assistant") {
+      const textBlock = lastAssistant.message.content.find((b) => b.type === "text");
+      if (textBlock && textBlock.type === "text") {
+        return textBlock.text.slice(0, 80);
+      }
+    }
+    return 'Waiting for input';
+  }
+
+  // Fallback to original prompt
+  return sessionState.originalPrompt.slice(0, 50);
 }
 
 /**
