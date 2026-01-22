@@ -13,6 +13,11 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 
 if [ -n "$SESSION_ID" ]; then
+  # DEBUG: Log what Claude CLI sends
+  echo "=== UserPromptSubmit hook called at $(date) ===" >> "$SIGNALS_DIR/hooks-debug.log"
+  echo "$INPUT" | jq '.' >> "$SIGNALS_DIR/hooks-debug.log"
+  echo "" >> "$SIGNALS_DIR/hooks-debug.log"
+
   # Write working signal with timestamp
   echo "$INPUT" | jq -c '. + {working_since: (now | tostring)}' > "$SIGNALS_DIR/$SESSION_ID.working.json"
 

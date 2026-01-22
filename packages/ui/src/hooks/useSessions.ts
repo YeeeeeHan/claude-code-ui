@@ -69,12 +69,15 @@ export interface RepoGroup {
 
 /**
  * Group sessions by repo, sorted by activity score.
- * Only includes sessions with a running Claude process (hasProcess: true).
+ * Only includes sessions with a running Claude process (hasProcess: true)
+ * and not explicitly ended (status !== "idle" from daemon).
+ * Note: UI also computes "idle" based on elapsed time, but daemon's "idle"
+ * specifically means SessionEnd hook fired (.ended.json exists).
  * Excludes repo groups that have no active sessions.
  */
 export function groupSessionsByRepo(sessions: Session[]): RepoGroup[] {
-  // Filter to only sessions with a running Claude process
-  const activeSessions = sessions.filter((s) => s.hasProcess);
+  // Filter to only sessions with a running Claude process AND not explicitly ended
+  const activeSessions = sessions.filter((s) => s.hasProcess && s.status !== "idle");
 
   const groups = new Map<string, Session[]>();
 

@@ -13,6 +13,11 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 
 if [ -n "$SESSION_ID" ]; then
+  # DEBUG: Log what Claude CLI sends
+  echo "=== Stop hook called at $(date) ===" >> "$SIGNALS_DIR/hooks-debug.log"
+  echo "$INPUT" | jq '.' >> "$SIGNALS_DIR/hooks-debug.log"
+  echo "" >> "$SIGNALS_DIR/hooks-debug.log"
+
   # Write stop signal with timestamp
   echo "$INPUT" | jq -c '. + {stopped_at: (now | tostring)}' > "$SIGNALS_DIR/$SESSION_ID.stop.json"
 

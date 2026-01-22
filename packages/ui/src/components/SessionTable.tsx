@@ -21,17 +21,15 @@ interface SessionTableProps {
 type EffectiveStatus = "working" | "approval" | "waiting" | "idle";
 
 function getEffectiveStatus(session: Session): EffectiveStatus {
-  const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
-  const elapsed = Date.now() - new Date(session.lastActivityAt).getTime();
-
-  if (elapsed > IDLE_TIMEOUT_MS) {
-    return "idle";
-  }
+  // Use daemon's status directly (idle sessions are already filtered out)
   if (session.status === "working") {
     return "working";
   }
   if (session.status === "waiting" && session.hasPendingToolUse) {
     return "approval";
+  }
+  if (session.status === "idle") {
+    return "idle";
   }
   return "waiting";
 }
