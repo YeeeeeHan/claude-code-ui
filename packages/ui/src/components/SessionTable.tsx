@@ -118,8 +118,8 @@ function SessionRow({ session }: { session: Session }) {
       <HoverCard.Trigger>
         <Table.Row style={{ cursor: "pointer" }}>
           <Table.Cell>
-            <Flex align="center" gap="2" wrap="wrap">
-              <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)" }}>
+            <Flex align="center" gap="2" wrap="nowrap">
+              <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)", whiteSpace: "nowrap" }}>
                 {statusDisplay.symbol} {statusDisplay.label}
               </Text>
               {session.isLive && (
