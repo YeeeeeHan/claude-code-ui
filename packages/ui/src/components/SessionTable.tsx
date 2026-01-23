@@ -5,6 +5,7 @@ import type { Session } from "../data/schema";
 interface SessionTableProps {
   sessions: Session[];
   selectedSessionId?: string | null;
+  highlightedSessionId?: string | null;
   onSelectSession?: (session: Session) => void;
   onDismiss?: (sessionId: string) => void;
 }
@@ -56,11 +57,12 @@ function formatTimeAgo(isoString: string): string {
 interface SessionRowProps {
   session: Session;
   isSelected: boolean;
+  isHighlighted: boolean;
   onSelect?: (session: Session) => void;
   onDismiss?: (sessionId: string) => void;
 }
 
-function SessionRow({ session, isSelected, onSelect, onDismiss }: SessionRowProps) {
+function SessionRow({ session, isSelected, isHighlighted, onSelect, onDismiss }: SessionRowProps) {
   const effectiveStatus = getEffectiveStatus(session);
   const statusDisplay = getStatusDisplay(effectiveStatus);
   const canDismiss = effectiveStatus === "waiting" || effectiveStatus === "idle";
@@ -83,7 +85,8 @@ function SessionRow({ session, isSelected, onSelect, onDismiss }: SessionRowProp
       style={{
         cursor: "pointer",
         backgroundColor: isSelected ? "var(--accent-4)" : undefined,
-        boxShadow: isSelected ? "inset 3px 0 0 var(--accent-9)" : undefined,
+        boxShadow: isHighlighted ? "inset 3px 0 0 var(--cyan-9)" : isSelected ? "inset 3px 0 0 var(--accent-9)" : undefined,
+        outline: isHighlighted ? "1px solid var(--cyan-7)" : undefined,
       }}
     >
       <Table.Cell>
@@ -127,7 +130,7 @@ function SessionRow({ session, isSelected, onSelect, onDismiss }: SessionRowProp
   );
 }
 
-export function SessionTable({ sessions, selectedSessionId, onSelectSession, onDismiss }: SessionTableProps) {
+export function SessionTable({ sessions, selectedSessionId, highlightedSessionId, onSelectSession, onDismiss }: SessionTableProps) {
   // Sort by age (youngest/most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
     const aTime = new Date(a.lastActivityAt).getTime();
@@ -151,6 +154,7 @@ export function SessionTable({ sessions, selectedSessionId, onSelectSession, onD
             key={session.sessionId}
             session={session}
             isSelected={session.sessionId === selectedSessionId}
+            isHighlighted={session.sessionId === highlightedSessionId}
             onSelect={onSelectSession}
             onDismiss={onDismiss}
           />

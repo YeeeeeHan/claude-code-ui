@@ -8,6 +8,7 @@ interface RepoSectionProps {
   sessions: Session[];
   activityScore: number;
   selectedSessionId?: string | null;
+  highlightedSessionId?: string | null;
   onSelectSession?: (session: Session) => void;
   onDismiss?: (sessionId: string) => void;
 }
@@ -18,6 +19,7 @@ export function RepoSection({
   sessions,
   activityScore,
   selectedSessionId,
+  highlightedSessionId,
   onSelectSession,
   onDismiss,
 }: RepoSectionProps) {
@@ -50,6 +52,7 @@ export function RepoSection({
       <SessionTable
         sessions={sessions}
         selectedSessionId={selectedSessionId}
+        highlightedSessionId={highlightedSessionId}
         onSelectSession={onSelectSession}
         onDismiss={onDismiss}
       />

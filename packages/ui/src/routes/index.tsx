@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Flex, Text, Box, ScrollArea } from "@radix-ui/themes";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { RepoSection } from "../components/RepoSection";
 import { SessionDetailPanel } from "../components/SessionDetailPanel";
 import { useSessions, groupSessionsByRepo } from "../hooks/useSessions";
 import { requestNotificationPermission, checkAndNotify } from "../utils/notifications";
-import { dismissSession } from "../utils/api";
+import { dismissSession, navigateToSession } from "../utils/api";
 import type { Session } from "../data/schema";
 
 export const Route = createFileRoute("/")({
@@ -15,6 +15,7 @@ export const Route = createFileRoute("/")({
 function IndexPage() {
   const { sessions } = useSessions();
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
 
   // Force re-render every minute to update relative times and activity scores
   const [, setTick] = useState(0);
@@ -22,6 +23,56 @@ function IndexPage() {
     const interval = setInterval(() => setTick((t) => t + 1), 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  const repoGroups = groupSessionsByRepo(sessions);
+
+  // Flatten sessions in display order for keyboard navigation
+  const flattenedSessions = useMemo(() => {
+    const result: Session[] = [];
+    for (const group of repoGroups) {
+      // Sort sessions within group by lastActivityAt desc (same as SessionTable)
+      const sorted = [...group.sessions].sort(
+        (a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime()
+      );
+      result.push(...sorted);
+    }
+    return result;
+  }, [repoGroups]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (flattenedSessions.length === 0) return;
+
+      const currentIndex = highlightedSessionId
+        ? flattenedSessions.findIndex((s) => s.sessionId === highlightedSessionId)
+        : -1;
+
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        const nextIndex = currentIndex < flattenedSessions.length - 1 ? currentIndex + 1 : 0;
+        const nextSession = flattenedSessions[nextIndex];
+        setHighlightedSessionId(nextSession.sessionId);
+        setSelectedSession(nextSession);
+      } else if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : flattenedSessions.length - 1;
+        const prevSession = flattenedSessions[prevIndex];
+        setHighlightedSessionId(prevSession.sessionId);
+        setSelectedSession(prevSession);
+      } else if (e.key === "Enter" && highlightedSessionId) {
+        e.preventDefault();
+        navigateToSession(highlightedSessionId).then((result) => {
+          if (!result.success) {
+            console.error("Navigation failed:", result.error || result.message);
+          }
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [flattenedSessions, highlightedSessionId]);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -57,9 +108,8 @@ function IndexPage() {
 
   const handleSelectSession = useCallback((session: Session) => {
     setSelectedSession(session);
+    setHighlightedSessionId(session.sessionId);
   }, []);
-
-  const repoGroups = groupSessionsByRepo(sessions);
 
   if (repoGroups.length === 0) {
     return (
@@ -88,6 +138,7 @@ function IndexPage() {
                 sessions={group.sessions}
                 activityScore={group.activityScore}
                 selectedSessionId={selectedSession?.sessionId}
+                highlightedSessionId={highlightedSessionId}
                 onSelectSession={handleSelectSession}
                 onDismiss={handleDismiss}
               />
