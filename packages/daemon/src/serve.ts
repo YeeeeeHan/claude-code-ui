@@ -10,6 +10,10 @@ import { fileURLToPath } from "node:url";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 // Load .env from project root (handles both src and dist execution)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +51,23 @@ const colors = {
 };
 
 /**
+ * Navigate to a tmux pane and focus iTerm2
+ * Supports both regular tmux and tmux -CC (iTerm2 integration) mode
+ */
+async function navigateToPane(paneInfo: { tmux_pane: string; tmux_session: string; tmux_window: string }): Promise<void> {
+  const target = `${paneInfo.tmux_session}:${paneInfo.tmux_window}`;
+
+  // Select the window first (this triggers iTerm2 tab switch in -CC mode)
+  await execAsync(`tmux select-window -t "${target}"`);
+
+  // Then select the specific pane within that window
+  await execAsync(`tmux select-pane -t "${paneInfo.tmux_pane}"`);
+
+  // Bring iTerm2 to foreground
+  await execAsync(`osascript -e 'tell application "iTerm2" to activate'`);
+}
+
+/**
  * Check if a session is recent enough to include
  */
 function isRecentSession(session: SessionState): boolean {
@@ -56,13 +77,15 @@ function isRecentSession(session: SessionState): boolean {
 
 /**
  * Create HTTP API server for session management endpoints.
- * Handles CORS and provides endpoints for dismissing orphaned sessions.
+ * Handles:
+ * - POST /api/navigate/:sessionId - Navigate to tmux pane
+ * - POST /api/sessions/:sessionId/end - Dismiss orphaned session
  */
-function createApiServer(): Server {
-  return createServer((req: IncomingMessage, res: ServerResponse) => {
+function createApiServer(watcher: SessionWatcher): Server {
+  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // CORS headers for all responses
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
     // Handle preflight
@@ -72,10 +95,49 @@ function createApiServer(): Server {
       return;
     }
 
-    // POST /api/sessions/:sessionId/end - Mark session as ended
-    const match = req.url?.match(/^\/api\/sessions\/([^/]+)\/end$/);
-    if (match && req.method === "POST") {
-      const sessionId = decodeURIComponent(match[1]);
+    const url = req.url ?? "/";
+
+    // POST /api/navigate/:sessionId - Navigate to tmux pane
+    const navigateMatch = url.match(/^\/api\/navigate\/([^/]+)$/);
+    if (navigateMatch && req.method === "POST") {
+      const sessionId = decodeURIComponent(navigateMatch[1]);
+
+      try {
+        const paneInfo = watcher.getPaneInfo(sessionId);
+
+        if (!paneInfo) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            error: "Pane not found",
+            message: "No tmux pane registered for this session. Make sure you started Claude in a tmux pane.",
+          }));
+          return;
+        }
+
+        await navigateToPane(paneInfo);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          success: true,
+          pane: paneInfo.tmux_pane,
+          session: paneInfo.tmux_session,
+          window: paneInfo.tmux_window,
+        }));
+      } catch (error) {
+        console.error(`${colors.yellow}[ERROR]${colors.reset} Navigate failed:`, error);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          error: "Navigation failed",
+          message: error instanceof Error ? error.message : "Unknown error",
+        }));
+      }
+      return;
+    }
+
+    // POST /api/sessions/:sessionId/end - Mark session as ended (dismiss)
+    const endMatch = url.match(/^\/api\/sessions\/([^/]+)\/end$/);
+    if (endMatch && req.method === "POST") {
+      const sessionId = decodeURIComponent(endMatch[1]);
 
       // Ensure signals directory exists
       if (!existsSync(SIGNALS_DIR)) {
@@ -107,6 +169,13 @@ function createApiServer(): Server {
       return;
     }
 
+    // GET /api/health
+    if (url === "/api/health" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
     // 404 for all other routes
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
@@ -122,17 +191,20 @@ async function main(): Promise<void> {
   const streamServer = new StreamServer({ port: PORT });
   await streamServer.start();
 
-  // Start the API server for session management
-  const apiServer = createApiServer();
-  apiServer.listen(API_PORT, "127.0.0.1", () => {
-    console.log(`API server: ${colors.cyan}http://127.0.0.1:${API_PORT}${colors.reset}`);
-  });
-
   console.log(`Stream URL: ${colors.cyan}${streamServer.getStreamUrl()}${colors.reset}`);
-  console.log();
 
   // Start the session watcher
   const watcher = new SessionWatcher({ debounceMs: 100 });
+
+  // Start the API server
+  const apiServer = createApiServer(watcher);
+  await new Promise<void>((resolve) => {
+    apiServer.listen(API_PORT, "127.0.0.1", () => {
+      console.log(`API URL: ${colors.cyan}http://127.0.0.1:${API_PORT}${colors.reset}`);
+      console.log();
+      resolve();
+    });
+  });
 
   watcher.on("session", async (event: SessionEvent) => {
     const { type, session, priority } = event;

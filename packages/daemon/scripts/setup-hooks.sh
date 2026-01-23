@@ -1,68 +1,62 @@
 #!/bin/bash
-# Setup script for claude-code-ui daemon hooks
-# Installs hooks for accurate session state detection:
-# - UserPromptSubmit: detect when user starts a turn (working)
-# - PermissionRequest: detect when waiting for user approval
-# - Stop: detect when Claude finishes responding (waiting)
-# - SessionEnd: detect when session closes (idle)
+# Installs claude-code-ui hooks to ~/.claude/hooks/
+# These hooks enable the dashboard to track session state and navigate to terminals
+#
+# Hooks installed:
+# - session-start.sh    : registers tmux pane for click-to-navigate
+# - user-prompt-submit.sh: marks session as "working"
+# - permission-request.sh: marks session as waiting for approval
+# - stop.sh             : marks session as waiting for user input
+# - session-end.sh      : marks session as idle
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SETTINGS_FILE="$HOME/.claude/settings.json"
+HOOKS_SOURCE="$SCRIPT_DIR/hooks"
+HOOKS_DEST="$HOME/.claude/hooks"
 SIGNALS_DIR="$HOME/.claude/session-signals"
+SETTINGS_FILE="$HOME/.claude/settings.json"
 
-echo "Setting up claude-code-ui hooks..."
+echo "Installing claude-code-ui hooks..."
 
-# Create signals directory
+# Create directories
+mkdir -p "$HOOKS_DEST"
 mkdir -p "$SIGNALS_DIR"
-echo "Created $SIGNALS_DIR"
+
+# Copy hooks to global location
+cp "$HOOKS_SOURCE/session-start.sh" "$HOOKS_DEST/"
+cp "$HOOKS_SOURCE/user-prompt-submit.sh" "$HOOKS_DEST/"
+cp "$HOOKS_SOURCE/permission-request.sh" "$HOOKS_DEST/"
+cp "$HOOKS_SOURCE/stop.sh" "$HOOKS_DEST/"
+cp "$HOOKS_SOURCE/session-end.sh" "$HOOKS_DEST/"
+
+# Make executable
+chmod +x "$HOOKS_DEST"/*.sh
+
+echo "Hooks installed to $HOOKS_DEST"
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
-    echo "Error: jq is required but not installed."
-    echo "Install with: brew install jq (macOS) or apt install jq (Linux)"
-    exit 1
-fi
-
-# Check if settings.json exists
-if [ ! -f "$SETTINGS_FILE" ]; then
-    echo "Creating new settings.json..."
-    echo '{}' > "$SETTINGS_FILE"
+    echo ""
+    echo "Warning: jq is not installed. You'll need to manually update settings.json"
+    echo "Install with: brew install jq"
+    exit 0
 fi
 
 # Backup settings
-cp "$SETTINGS_FILE" "$SETTINGS_FILE.backup"
-echo "Backed up settings to $SETTINGS_FILE.backup"
+if [ -f "$SETTINGS_FILE" ]; then
+    cp "$SETTINGS_FILE" "$SETTINGS_FILE.backup"
+fi
 
-# Build the hooks configuration
-# UserPromptSubmit: write working signal when user starts turn
-USER_PROMPT_HOOK="$SCRIPT_DIR/hooks/user-prompt-submit.sh"
-# PermissionRequest: write pending permission file
-PERMISSION_HOOK="$SCRIPT_DIR/hooks/permission-request.sh"
-# Stop: write turn-ended signal
-STOP_HOOK="$SCRIPT_DIR/hooks/stop.sh"
-# SessionEnd: write session-ended signal
-SESSION_END_HOOK="$SCRIPT_DIR/hooks/session-end.sh"
+# Update settings.json with hook configuration
+jq '
+  .hooks.SessionStart = [{"matcher": "", "hooks": [{"type": "command", "command": ($ENV.HOME + "/.claude/hooks/session-start.sh")}]}] |
+  .hooks.UserPromptSubmit = [{"matcher": "", "hooks": [{"type": "command", "command": ($ENV.HOME + "/.claude/hooks/user-prompt-submit.sh")}]}] |
+  .hooks.PermissionRequest = [{"matcher": "", "hooks": [{"type": "command", "command": ($ENV.HOME + "/.claude/hooks/permission-request.sh")}]}] |
+  .hooks.Stop = [{"matcher": "", "hooks": [{"type": "command", "command": ($ENV.HOME + "/.claude/hooks/stop.sh")}]}] |
+  .hooks.SessionEnd = [{"matcher": "", "hooks": [{"type": "command", "command": ($ENV.HOME + "/.claude/hooks/session-end.sh")}]}]
+' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
 
-# Add all hooks
-jq --arg prompt "$USER_PROMPT_HOOK" \
-   --arg perm "$PERMISSION_HOOK" \
-   --arg stop "$STOP_HOOK" \
-   --arg end "$SESSION_END_HOOK" '
-  .hooks.UserPromptSubmit = [{"matcher": "", "hooks": [{"type": "command", "command": $prompt}]}] |
-  .hooks.PermissionRequest = [{"matcher": "", "hooks": [{"type": "command", "command": $perm}]}] |
-  .hooks.Stop = [{"matcher": "", "hooks": [{"type": "command", "command": $stop}]}] |
-  .hooks.SessionEnd = [{"matcher": "", "hooks": [{"type": "command", "command": $end}]}]
-' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
-mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-
-echo "Added hooks to $SETTINGS_FILE:"
-echo "  - UserPromptSubmit (detect turn started → working)"
-echo "  - PermissionRequest (detect approval needed)"
-echo "  - Stop (detect turn ended → waiting)"
-echo "  - SessionEnd (detect session closed → idle)"
+echo "Updated $SETTINGS_FILE"
 echo ""
-echo "Setup complete! The daemon will now accurately track session states."
-echo ""
-echo "Note: You may need to restart any running Claude Code sessions for hooks to take effect."
+echo "Setup complete! Restart Claude Code sessions for hooks to take effect."

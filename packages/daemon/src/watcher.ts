@@ -43,6 +43,14 @@ export interface WorkingSignal {
   working_since: string;
 }
 
+export interface PaneSignal {
+  session_id: string;
+  tmux_pane: string;
+  tmux_session: string;
+  tmux_window: string;
+  registered_at: string;
+}
+
 export interface SessionState {
   sessionId: string;
   filepath: string;
@@ -86,6 +94,7 @@ export class SessionWatcher extends EventEmitter {
   private workingSignals = new Map<string, WorkingSignal>();
   private stopSignals = new Map<string, StopSignal>();
   private endedSignals = new Map<string, SessionEndSignal>();
+  private paneSignals = new Map<string, PaneSignal>(); // tmux pane info for click-to-navigate
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private debounceMs: number;
   private staleCheckInterval: NodeJS.Timeout | null = null;
@@ -129,6 +138,13 @@ export class SessionWatcher extends EventEmitter {
    */
   hasEndedSignal(sessionId: string): boolean {
     return this.endedSignals.has(sessionId);
+  }
+
+  /**
+   * Get tmux pane info for a session (for click-to-navigate).
+   */
+  getPaneInfo(sessionId: string): PaneSignal | undefined {
+    return this.paneSignals.get(sessionId);
   }
 
   async start(): Promise<void> {
@@ -270,11 +286,11 @@ export class SessionWatcher extends EventEmitter {
    * Parse signal filename to extract session ID and signal type.
    * Format: <session_id>.<type>.json (e.g., abc123.permission.json)
    */
-  private parseSignalFilename(filepath: string): { sessionId: string; type: "working" | "permission" | "stop" | "ended" } | null {
+  private parseSignalFilename(filepath: string): { sessionId: string; type: "working" | "permission" | "stop" | "ended" | "pane" } | null {
     const filename = filepath.split("/").pop() || "";
-    const match = filename.match(/^(.+)\.(working|permission|stop|ended)\.json$/);
+    const match = filename.match(/^(.+)\.(working|permission|stop|ended|pane)\.json$/);
     if (!match) return null;
-    return { sessionId: match[1], type: match[2] as "working" | "permission" | "stop" | "ended" };
+    return { sessionId: match[1], type: match[2] as "working" | "permission" | "stop" | "ended" | "pane" };
   }
 
   /**
@@ -373,6 +389,10 @@ export class SessionWatcher extends EventEmitter {
           };
           this.emit("session", { type: "updated", session, previousStatus } satisfies SessionEvent);
         }
+      } else if (type === "pane") {
+        const paneSignal = data as PaneSignal;
+        log("Watcher", `Pane registered for session ${sessionId}: ${paneSignal.tmux_pane} (session: ${paneSignal.tmux_session})`);
+        this.paneSignals.set(sessionId, paneSignal);
       }
     } catch {
       // Ignore parse errors
@@ -416,6 +436,9 @@ export class SessionWatcher extends EventEmitter {
       if (session) {
         session.hasEndedSignal = false;
       }
+    } else if (type === "pane") {
+      log("Watcher", `Pane signal removed for session ${sessionId}`);
+      this.paneSignals.delete(sessionId);
     }
   }
 

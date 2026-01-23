@@ -1,10 +1,12 @@
-import { Table, Text, Code, HoverCard, Flex, Heading, Box, Badge, Separator, Blockquote, IconButton, Tooltip } from "@radix-ui/themes";
+import { useState } from "react";
+import { Table, Text, Code, HoverCard, Flex, Heading, Box, Badge, Separator, Blockquote, IconButton, Tooltip, Callout } from "@radix-ui/themes";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { Session, CIStatus } from "../data/schema";
+import { navigateToSession } from "../utils/api";
 
 // Customize oneDark to improve comment contrast
 const codeTheme = {
@@ -106,7 +108,7 @@ function getCIStatusColor(status: CIStatus): "green" | "red" | "yellow" | "gray"
   }
 }
 
-function SessionRow({ session, onDismiss }: { session: Session; onDismiss?: (sessionId: string) => void }) {
+function SessionRow({ session, onDismiss, onError }: { session: Session; onDismiss?: (sessionId: string) => void; onError: (message: string) => void }) {
   const effectiveStatus = getEffectiveStatus(session);
   const statusDisplay = getStatusDisplay(effectiveStatus);
   // Show dismiss button on waiting sessions (not working ones)
@@ -114,6 +116,13 @@ function SessionRow({ session, onDismiss }: { session: Session; onDismiss?: (ses
   // Show only last 2 levels of the path (e.g., "useful_resources/claude-code-ui")
   const parts = session.cwd.split("/");
   const dirPath = parts.slice(-2).join("/");
+
+  const handleClick = async () => {
+    const result = await navigateToSession(session.sessionId);
+    if (!result.success) {
+      onError(result.message || result.error || "Failed to navigate");
+    }
+  };
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -124,7 +133,7 @@ function SessionRow({ session, onDismiss }: { session: Session; onDismiss?: (ses
   return (
     <HoverCard.Root openDelay={400}>
       <HoverCard.Trigger>
-        <Table.Row style={{ cursor: "pointer" }}>
+        <Table.Row style={{ cursor: "pointer" }} onClick={handleClick}>
           <Table.Cell>
             <Text color={statusDisplay.color} style={{ fontFamily: "var(--code-font-family)", whiteSpace: "nowrap" }}>
               {statusDisplay.symbol} {statusDisplay.label}
@@ -315,6 +324,8 @@ function SessionRow({ session, onDismiss }: { session: Session; onDismiss?: (ses
 }
 
 export function SessionTable({ sessions, onDismiss }: SessionTableProps) {
+  const [error, setError] = useState<string | null>(null);
+
   // Sessions are already filtered by hasProcess in groupSessionsByRepo
   const sortedSessions = [...sessions].sort((a, b) => {
     const statusPriority: Record<EffectiveStatus, number> = {
@@ -333,22 +344,35 @@ export function SessionTable({ sessions, onDismiss }: SessionTableProps) {
     return a.cwd.localeCompare(b.cwd);
   });
 
+  const handleError = (message: string) => {
+    setError(message);
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => setError(null), 5000);
+  };
+
   return (
-    <Table.Root variant="surface">
-      <Table.Header>
-        <Table.Row>
-          <Table.ColumnHeaderCell style={{ width: 120 }}>Status</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Directory</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Goal</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Branch</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell style={{ width: 80 }}>Age</Table.ColumnHeaderCell>
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {sortedSessions.map((session) => (
-          <SessionRow key={session.sessionId} session={session} onDismiss={onDismiss} />
-        ))}
-      </Table.Body>
-    </Table.Root>
+    <>
+      {error && (
+        <Callout.Root color="red" mb="3">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
+      <Table.Root variant="surface">
+        <Table.Header>
+          <Table.Row>
+            <Table.ColumnHeaderCell style={{ width: 120 }}>Status</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Directory</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Goal</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Branch</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell style={{ width: 80 }}>Age</Table.ColumnHeaderCell>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {sortedSessions.map((session) => (
+            <SessionRow key={session.sessionId} session={session} onDismiss={onDismiss} onError={handleError} />
+          ))}
+        </Table.Body>
+      </Table.Root>
+    </>
   );
 }
