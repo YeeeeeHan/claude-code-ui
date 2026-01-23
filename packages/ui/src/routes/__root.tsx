@@ -1,6 +1,6 @@
+import { Box, Flex, Heading, Text, Theme } from "@radix-ui/themes";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
-import { Theme, Box, Heading, Flex, Text } from "@radix-ui/themes";
 import { getSessionsDb } from "../data/sessionsDb";
 
 export const Route = createRootRoute({
@@ -17,22 +17,20 @@ function RootLayout() {
     <Theme
       accentColor="violet"
       grayColor="slate"
-      radius="large"
-      scaling="100%"
+      radius="medium"
+      scaling="110%"
       appearance="dark"
     >
-      <Box px="5" py="5" style={{ maxWidth: "1800px", margin: "0 auto" }}>
-        <Flex direction="column" gap="5">
-          <Flex align="center" gap="3">
-            <Heading size="8" weight="bold">
-              Sessions
-            </Heading>
-            <Text size="2" color="gray" style={{ marginTop: "8px" }}>
-              Claude Code
-            </Text>
-          </Flex>
-          <Outlet />
+      <Box px="4" pt="6" pb="2" style={{ maxWidth: "1800px", margin: "0 auto", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <Flex align="center" gap="2" mb="5" style={{ flexShrink: 0 }}>
+          <Heading size="5" weight="bold">
+            Sessions
+          </Heading>
+          <Text size="1" color="gray">
+            Claude Code
+          </Text>
         </Flex>
+        <Outlet />
       </Box>
       <TanStackRouterDevtools />
     </Theme>

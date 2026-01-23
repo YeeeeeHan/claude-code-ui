@@ -7,16 +7,26 @@ interface RepoSectionProps {
   repoUrl: string | null;
   sessions: Session[];
   activityScore: number;
+  selectedSessionId?: string | null;
+  onSelectSession?: (session: Session) => void;
   onDismiss?: (sessionId: string) => void;
 }
 
-export function RepoSection({ repoId, repoUrl, sessions, activityScore, onDismiss }: RepoSectionProps) {
+export function RepoSection({
+  repoId,
+  repoUrl,
+  sessions,
+  activityScore,
+  selectedSessionId,
+  onSelectSession,
+  onDismiss,
+}: RepoSectionProps) {
   const isHot = activityScore > 50;
 
   return (
-    <Box mb="7">
-      <Flex align="center" gap="3" mb="4">
-        <Heading size="6" weight="bold">
+    <Box mb="4">
+      <Flex align="center" gap="2" mb="3">
+        <Heading size="3" weight="bold">
           {repoId === "Other" ? (
             <Text color="gray">Other</Text>
           ) : repoUrl ? (
@@ -28,18 +38,23 @@ export function RepoSection({ repoId, repoUrl, sessions, activityScore, onDismis
           )}
         </Heading>
         {isHot && (
-          <Text size="2" color="orange">
+          <Text size="1" color="orange">
             🔥
           </Text>
         )}
-        <Text size="2" color="gray">
+        <Text size="1" color="gray">
           {sessions.length} session{sessions.length !== 1 ? "s" : ""}
         </Text>
       </Flex>
 
-      <SessionTable sessions={sessions} onDismiss={onDismiss} />
+      <SessionTable
+        sessions={sessions}
+        selectedSessionId={selectedSessionId}
+        onSelectSession={onSelectSession}
+        onDismiss={onDismiss}
+      />
 
-      <Separator size="4" mt="6" />
+      <Separator size="4" mt="4" />
     </Box>
   );
 }
