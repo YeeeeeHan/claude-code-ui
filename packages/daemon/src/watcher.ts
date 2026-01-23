@@ -551,10 +551,12 @@ export class SessionWatcher extends EventEmitter {
    */
   private async updateProcessStatus(): Promise<void> {
     const newActiveCwds = await this.detectActiveCwds();
+    log("Watcher", `updateProcessStatus: activeCwds=${Array.from(newActiveCwds).join(', ')}`);
 
     for (const session of this.sessions.values()) {
       const hadProcess = this.activeCwds.has(session.cwd);
       const hasProcess = newActiveCwds.has(session.cwd);
+      log("Watcher", `  ${session.sessionId.slice(0,8)}: cwd=${session.cwd}, hadProcess=${hadProcess}, hasProcess=${hasProcess}`);
 
       if (hadProcess !== hasProcess) {
         session.hasProcess = hasProcess;

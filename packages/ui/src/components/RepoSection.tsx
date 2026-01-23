@@ -7,9 +7,10 @@ interface RepoSectionProps {
   repoUrl: string | null;
   sessions: Session[];
   activityScore: number;
+  onDismiss?: (sessionId: string) => void;
 }
 
-export function RepoSection({ repoId, repoUrl, sessions, activityScore }: RepoSectionProps) {
+export function RepoSection({ repoId, repoUrl, sessions, activityScore, onDismiss }: RepoSectionProps) {
   const isHot = activityScore > 50;
 
   return (
@@ -36,7 +37,7 @@ export function RepoSection({ repoId, repoUrl, sessions, activityScore }: RepoSe
         </Text>
       </Flex>
 
-      <SessionTable sessions={sessions} />
+      <SessionTable sessions={sessions} onDismiss={onDismiss} />
 
       <Separator size="4" mt="6" />
     </Box>

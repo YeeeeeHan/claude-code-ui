@@ -7,7 +7,9 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { join } from "node:path";
 
 // Load .env from project root (handles both src and dist execution)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,8 +29,10 @@ import { StreamServer } from "./server.js";
 import { formatStatus } from "./status.js";
 
 const PORT = parseInt(process.env.PORT ?? "4450", 10);
+const API_PORT = parseInt(process.env.API_PORT ?? "4451", 10);
 const MAX_AGE_HOURS = parseInt(process.env.MAX_AGE_HOURS ?? "24", 10);
 const MAX_AGE_MS = MAX_AGE_HOURS * 60 * 60 * 1000;
+const SIGNALS_DIR = `${process.env.HOME}/.claude/session-signals`;
 
 // ANSI colors
 const colors = {
@@ -50,6 +54,65 @@ function isRecentSession(session: SessionState): boolean {
   return Date.now() - lastActivity < MAX_AGE_MS;
 }
 
+/**
+ * Create HTTP API server for session management endpoints.
+ * Handles CORS and provides endpoints for dismissing orphaned sessions.
+ */
+function createApiServer(): Server {
+  return createServer((req: IncomingMessage, res: ServerResponse) => {
+    // CORS headers for all responses
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Handle preflight
+    if (req.method === "OPTIONS") {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    // POST /api/sessions/:sessionId/end - Mark session as ended
+    const match = req.url?.match(/^\/api\/sessions\/([^/]+)\/end$/);
+    if (match && req.method === "POST") {
+      const sessionId = decodeURIComponent(match[1]);
+
+      // Ensure signals directory exists
+      if (!existsSync(SIGNALS_DIR)) {
+        mkdirSync(SIGNALS_DIR, { recursive: true });
+      }
+
+      const signalPath = join(SIGNALS_DIR, `${sessionId}.ended.json`);
+      const signal = {
+        session_id: sessionId,
+        ended_at: new Date().toISOString(),
+        source: "ui_dismiss",
+      };
+
+      try {
+        writeFileSync(signalPath, JSON.stringify(signal, null, 2));
+        console.log(
+          `${colors.gray}${new Date().toLocaleTimeString()}${colors.reset} ` +
+          `${colors.blue}[END]${colors.reset} ` +
+          `${colors.cyan}${sessionId.slice(0, 8)}${colors.reset} ` +
+          `${colors.dim}dismissed by user${colors.reset}`
+        );
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, sessionId }));
+      } catch (error) {
+        console.error(`${colors.yellow}[ERROR]${colors.reset} Failed to create end signal:`, error);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: "Failed to create signal file" }));
+      }
+      return;
+    }
+
+    // 404 for all other routes
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  });
+}
+
 async function main(): Promise<void> {
   console.log(`${colors.bold}Claude Code Session Daemon${colors.reset}`);
   console.log(`${colors.dim}Showing sessions from last ${MAX_AGE_HOURS} hours${colors.reset}`);
@@ -58,6 +121,12 @@ async function main(): Promise<void> {
   // Start the durable streams server
   const streamServer = new StreamServer({ port: PORT });
   await streamServer.start();
+
+  // Start the API server for session management
+  const apiServer = createApiServer();
+  apiServer.listen(API_PORT, "127.0.0.1", () => {
+    console.log(`API server: ${colors.cyan}http://127.0.0.1:${API_PORT}${colors.reset}`);
+  });
 
   console.log(`Stream URL: ${colors.cyan}${streamServer.getStreamUrl()}${colors.reset}`);
   console.log();
@@ -112,6 +181,7 @@ async function main(): Promise<void> {
     console.log();
     console.log(`${colors.dim}Shutting down...${colors.reset}`);
     watcher.stop();
+    apiServer.close();
     await streamServer.stop();
     process.exit(0);
   });

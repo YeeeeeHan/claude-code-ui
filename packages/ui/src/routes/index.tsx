@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Flex, Text } from "@radix-ui/themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { RepoSection } from "../components/RepoSection";
 import { useSessions, groupSessionsByRepo } from "../hooks/useSessions";
 import { requestNotificationPermission, checkAndNotify } from "../utils/notifications";
+import { dismissSession } from "../utils/api";
 
 export const Route = createFileRoute("/")({
   component: IndexPage,
@@ -29,6 +30,15 @@ function IndexPage() {
     checkAndNotify(sessions);
   }, [sessions]);
 
+  // Handle dismissing orphaned sessions
+  const handleDismiss = useCallback(async (sessionId: string) => {
+    try {
+      await dismissSession(sessionId);
+    } catch (error) {
+      console.error("Failed to dismiss session:", error);
+    }
+  }, []);
+
   const repoGroups = groupSessionsByRepo(sessions);
 
   if (repoGroups.length === 0) {
@@ -53,6 +63,7 @@ function IndexPage() {
           repoUrl={group.repoUrl}
           sessions={group.sessions}
           activityScore={group.activityScore}
+          onDismiss={handleDismiss}
         />
       ))}
     </Flex>

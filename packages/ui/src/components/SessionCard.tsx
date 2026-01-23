@@ -1,4 +1,5 @@
-import { Card, Flex, Text, Code, Box, HoverCard, Badge, Heading, Separator, Blockquote } from "@radix-ui/themes";
+import { Card, Flex, Text, Code, Box, HoverCard, Badge, Heading, Separator, Blockquote, IconButton, Tooltip } from "@radix-ui/themes";
+import { Cross2Icon } from "@radix-ui/react-icons";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -17,6 +18,7 @@ import type { Session, CIStatus } from "../data/schema";
 interface SessionCardProps {
   session: Session;
   disableHover?: boolean;
+  onDismiss?: (sessionId: string) => void;
 }
 
 const toolIcons: Record<string, string> = {
@@ -30,10 +32,11 @@ const toolIcons: Record<string, string> = {
 
 function getCardClass(session: Session): string {
   const classes = ["session-card"];
-  if (session.status === "working") {
+  if (!session.hasProcess) {
+    classes.push("status-orphaned");
+  } else if (session.status === "working") {
     classes.push("status-working");
-  }
-  if (session.status === "waiting" && session.hasPendingToolUse) {
+  } else if (session.status === "waiting" && session.hasPendingToolUse) {
     classes.push("status-needs-approval");
   }
   return classes.join(" ");
@@ -110,29 +113,63 @@ function getCIStatusColor(status: CIStatus): "green" | "red" | "yellow" | "gray"
   }
 }
 
-export function SessionCard({ session, disableHover }: SessionCardProps) {
+export function SessionCard({ session, disableHover, onDismiss }: SessionCardProps) {
   const showPendingTool = session.hasPendingToolUse && session.pendingTool;
+  const isOrphaned = !session.hasProcess;
   // Show only last 2 levels of the path (e.g., "useful_resources/claude-code-ui")
   const parts = session.cwd.split("/");
   const dirPath = parts.slice(-2).join("/");
 
+  const handleDismiss = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onDismiss?.(session.sessionId);
+  };
+
   return (
     <HoverCard.Root openDelay={750} open={disableHover ? false : undefined}>
       <HoverCard.Trigger>
-        <Card size="2" className={getCardClass(session)}>
+        <Card size="2" className={getCardClass(session)} style={isOrphaned ? { opacity: 0.6 } : undefined}>
           <Flex direction="column" gap="4">
             {/* Header: directory and time */}
             <Flex justify="between" align="center">
-              <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
-                {dirPath}
-              </Text>
-              <Text size="1" color="gray">
-                {formatTimeAgo(session.lastActivityAt)}
-              </Text>
+              <Flex align="center" gap="2">
+                <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
+                  {dirPath}
+                </Text>
+                {isOrphaned && (
+                  <Badge color="gray" variant="soft" size="1">
+                    No process
+                  </Badge>
+                )}
+              </Flex>
+              <Flex align="center" gap="2">
+                <Text size="1" color="gray">
+                  {formatTimeAgo(session.lastActivityAt)}
+                </Text>
+                {isOrphaned && onDismiss && (
+                  <Tooltip content="Dismiss orphaned session">
+                    <IconButton
+                      size="1"
+                      variant="ghost"
+                      color="gray"
+                      onClick={handleDismiss}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <Cross2Icon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Flex>
             </Flex>
 
             {/* Main content: goal as primary text */}
-            <Heading size="3" weight="medium" highContrast>
+            <Heading
+              size="3"
+              weight="medium"
+              highContrast={!isOrphaned}
+              style={isOrphaned ? { textDecoration: "line-through", color: "var(--gray-9)" } : undefined}
+            >
               {session.goal || session.originalPrompt.slice(0, 50)}
             </Heading>
 
@@ -185,10 +222,11 @@ export function SessionCard({ session, disableHover }: SessionCardProps) {
 
       <HoverCard.Content
         size="3"
-        side="right"
+        side="top"
+        align="start"
         sideOffset={8}
         collisionPadding={20}
-        style={{ width: 500, maxWidth: "calc(100vw - 40px)", maxHeight: "calc(100vh - 40px)" }}
+        style={{ width: 500, maxWidth: "calc(100vw - 40px)", maxHeight: "calc(100vh - 200px)" }}
       >
         <Flex direction="column" gap="3" style={{ height: "100%" }}>
           {/* Header: goal */}
